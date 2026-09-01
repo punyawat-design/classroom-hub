@@ -1,35 +1,77 @@
-import { useEffect,useState } from "react";
+import { useEffect,useMemo,useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
-import { errText, thaiDate } from "../../lib/utils";
-import MaterialViewer, { MaterialItem } from "../../components/MaterialViewer";
+import { errText } from "../../lib/utils";
 import { useToast } from "../../context/ToastContext";
 
 export default function StudentCoursesPage(){
   const [courses,setCourses]=useState<any[]>([]);
   const [materials,setMaterials]=useState<any[]>([]);
   const [announcements,setAnnouncements]=useState<any[]>([]);
-  const [selected,setSelected]=useState<MaterialItem|null>(null);
   const {toast}=useToast();
 
   useEffect(()=>{(async()=>{
-    const [{data:c,error:ce},{data:m,error:me},{data:a,error:ae}]=await Promise.all([
+    const [{data:c,error:ce},{data:m,error:me},{data:a,error:ae}] = await Promise.all([
       supabase.from("courses").select("id,name").order("name"),
-      supabase.from("learning_materials").select("id,title,description,link_url,file_name,storage_path,course_id,courses(name)").order("created_at",{ascending:false}),
-      supabase.from("announcements").select("id,title,body,created_at,courses(name),classrooms(name)").order("created_at",{ascending:false}).limit(20)
+      supabase.from("learning_materials").select("id,course_id"),
+      supabase.from("announcements").select("id,course_id")
     ]);
-    if(ce||me||ae)toast("โหลดข้อมูลไม่สำเร็จ",errText(ce||me||ae),"error");
-    else {setCourses(c||[]);setMaterials(m||[]);setAnnouncements(a||[]);}
+    if(ce||me||ae){
+      toast("โหลดข้อมูลไม่สำเร็จ", errText(ce||me||ae), "error");
+      return;
+    }
+    setCourses(c||[]);
+    setMaterials(m||[]);
+    setAnnouncements(a||[]);
   })()},[]);
 
+  const stats = useMemo(()=>{
+    const map = new Map<string,{materials:number;announcements:number}>();
+    courses.forEach(c=>map.set(c.id,{materials:0,announcements:0}));
+
+    materials.forEach((m:any)=>{
+      const s=map.get(m.course_id)||{materials:0,announcements:0};
+      s.materials++;
+      map.set(m.course_id,s);
+    });
+
+    announcements.forEach((a:any)=>{
+      const s=map.get(a.course_id)||{materials:0,announcements:0};
+      s.announcements++;
+      map.set(a.course_id,s);
+    });
+
+    return map;
+  },[courses,materials,announcements]);
+
   return <>
-    <header className="page-header"><div><h1>รายวิชาและสื่อ</h1><p>เปิด PDF ในเว็บ หรือดาวน์โหลดไฟล์ไปอ่านเอง</p></div></header>
-    <section className="section"><h2>รายวิชาของฉัน</h2><div className="course-grid">{courses.map(c=><div className="card course-card" key={c.id}><b>{c.name}</b></div>)}</div></section>
-    <section className="section"><h2>สื่อการสอน</h2><div className="cards-list">{materials.map(m=><article className="card material-card" key={m.id}>
-      <div><h3>{m.title}</h3><div className="muted small">{m.courses?.name}</div><p>{m.description}</p></div>
-      <button className="btn primary" onClick={()=>setSelected(m)}>ดูสื่อ / ดาวน์โหลด</button>
-    </article>)}
-    {materials.length===0&&<div className="empty card">ยังไม่มีสื่อการสอน</div>}</div></section>
-    <section className="section"><h2>ประกาศล่าสุด</h2><div className="cards-list">{announcements.map(a=><article className="card" key={a.id}><h3>{a.title}</h3><div className="muted small">{a.courses?.name||"ทั่วไป"} • {a.classrooms?.name||"ทุกห้อง"} • {thaiDate(a.created_at)}</div><p>{a.body}</p></article>)}</div></section>
-    {selected&&<MaterialViewer item={selected} onClose={()=>setSelected(null)}/>}
+    <header className="page-header">
+      <div>
+        <h1>รายวิชาและสื่อ</h1>
+        <p>เลือกวิชาก่อน แล้วค่อยดูสื่อและประกาศของวิชานั้น</p>
+      </div>
+    </header>
+
+    <section className="section">
+      <h2>รายวิชาของฉัน</h2>
+      <div className="course-grid">
+        {courses.map(c=>{
+          const s=stats.get(c.id)||{materials:0,announcements:0};
+          return <Link key={c.id} className="card course-work-card" to={`/student/courses/${c.id}`}>
+            <div className="course-icon">📘</div>
+            <div>
+              <h3>{c.name}</h3>
+              <div className="muted small">กดเพื่อดูสื่อและประกาศของวิชานี้</div>
+            </div>
+            <div className="course-count">
+              <b>{s.materials}</b>
+              <span>สื่อการสอน</span>
+              {s.announcements>0&&<em>{s.announcements} ประกาศ</em>}
+            </div>
+          </Link>
+        })}
+        {courses.length===0&&<div className="empty card">ยังไม่มีรายวิชาที่ลงทะเบียนไว้</div>}
+      </div>
+    </section>
   </>;
 }

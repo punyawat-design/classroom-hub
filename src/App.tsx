@@ -8,7 +8,6 @@ import ClassroomsPage from "./pages/teacher/ClassroomsPage";
 import CoursesPage from "./pages/teacher/CoursesPage";
 import MaterialsPage from "./pages/teacher/MaterialsPage";
 import AssignmentsPage from "./pages/teacher/AssignmentsPage";
-import TeacherCourseAssignmentsPage from "./pages/teacher/TeacherCourseAssignmentsPage";
 import TrackingPage from "./pages/teacher/TrackingPage";
 import MatrixPage from "./pages/teacher/MatrixPage";
 import GradingPage from "./pages/teacher/GradingPage";
@@ -17,6 +16,7 @@ import AnnouncementsPage from "./pages/teacher/AnnouncementsPage";
 
 import StudentDashboard from "./pages/student/StudentDashboard";
 import StudentCoursesPage from "./pages/student/StudentCoursesPage";
+import StudentCourseDetailPage from "./pages/student/StudentCourseDetailPage";
 import StudentAssignmentsPage from "./pages/student/StudentAssignmentsPage";
 import StudentCourseAssignmentsPage from "./pages/student/StudentCourseAssignmentsPage";
 import StudentAssignmentDetail from "./pages/student/StudentAssignmentDetail";
@@ -33,7 +33,6 @@ export default function App(){
         <Route path="/teacher/courses" element={<CoursesPage/>}/>
         <Route path="/teacher/materials" element={<MaterialsPage/>}/>
         <Route path="/teacher/assignments" element={<AssignmentsPage/>}/>
-        <Route path="/teacher/assignments/course/:courseId" element={<TeacherCourseAssignmentsPage/>}/>
         <Route path="/teacher/tracking" element={<TrackingPage/>}/>
         <Route path="/teacher/matrix" element={<MatrixPage/>}/>
         <Route path="/teacher/grading" element={<GradingPage/>}/>
@@ -46,6 +45,7 @@ export default function App(){
       <Route element={<AppLayout/>}>
         <Route path="/student" element={<StudentDashboard/>}/>
         <Route path="/student/courses" element={<StudentCoursesPage/>}/>
+        <Route path="/student/courses/:courseId" element={<StudentCourseDetailPage/>}/>
         <Route path="/student/assignments" element={<StudentAssignmentsPage/>}/>
         <Route path="/student/assignments/course/:courseId" element={<StudentCourseAssignmentsPage/>}/>
         <Route path="/student/assignments/:id" element={<StudentAssignmentDetail/>}/>
