@@ -4,6 +4,15 @@ import { supabase } from "../../lib/supabase";
 import { errText } from "../../lib/utils";
 import { useToast } from "../../context/ToastContext";
 import { useConfirm } from "../../context/ConfirmContext";
+import RichTextEditor from "../../components/RichTextEditor";
+import AssignmentLinksEditor from "../../components/AssignmentLinksEditor";
+import { FILE_ACCEPT } from "../../lib/fileRules";
+import { richTextToPlain } from "../../lib/richText";
+import {
+  parseAssignmentLinks,
+  uploadAssignmentAttachments,
+  validateAssignmentAttachments
+} from "../../lib/assignmentResources";
 
 export default function CreateAssignmentPage(){
   const [courses,setCourses]=useState<any[]>([]);
@@ -36,17 +45,36 @@ export default function CreateAssignmentPage(){
     const form=e.currentTarget;
     const fd=new FormData(form);
     const courseId=String(fd.get("course_id")||"");
-    const title=String(fd.get("title")||"");
+    const title=String(fd.get("title")||"").trim();
     const course=courses.find(c=>c.id===courseId);
+    const input=form.elements.namedItem("assignment_files") as HTMLInputElement;
+    const files=Array.from(input?.files||[]);
 
     if(!courseId){
       toast("ยังไม่ได้เลือกรายวิชา","กรุณาเลือกรายวิชาก่อนสร้างงาน","error");
       return;
     }
 
+    const fileError=validateAssignmentAttachments(files);
+    if(fileError){
+      toast("ไฟล์ประกอบงานไม่ผ่านเงื่อนไข",fileError,"error");
+      return;
+    }
+
+    let links;
+    try{
+      links=parseAssignmentLinks(fd.get("resource_links"));
+    }catch(err){
+      toast("ลิงก์ไม่ถูกต้อง",errText(err),"error");
+      return;
+    }
+
+    const descriptionHtml=String(fd.get("description_html")||"");
+    const instructionsHtml=String(fd.get("instructions_html")||"");
+
     const ok=await confirm({
       title:"สร้างงานใหม่?",
-      message:`เพิ่มงาน “${title}” ในวิชา ${course?.name||""}`,
+      message:`เพิ่มงาน “${title}” ในวิชา ${course?.name||""}${files.length?` พร้อมไฟล์ประกอบ ${files.length} ไฟล์`:""}${links.length?` และลิงก์ ${links.length} รายการ`:""}`,
       confirmText:"สร้างงาน"
     });
 
@@ -55,16 +83,21 @@ export default function CreateAssignmentPage(){
     setBusy(true);
     setError("");
 
+    let createdId="";
+
     try{
       const {data:{user}}=await supabase.auth.getUser();
       if(!user)throw new Error("กรุณาเข้าสู่ระบบใหม่");
 
       const room=String(fd.get("classroom_id")||"");
 
-      const {error}=await supabase.from("assignments").insert({
+      const {data:created,error:createError}=await supabase.from("assignments").insert({
         title,
-        description:String(fd.get("description")||""),
-        instructions:String(fd.get("instructions")||""),
+        description:richTextToPlain(descriptionHtml),
+        instructions:richTextToPlain(instructionsHtml),
+        description_html:descriptionHtml,
+        instructions_html:instructionsHtml,
+        resource_links:links,
         course_id:courseId,
         classroom_id:room||null,
         teacher_id:user.id,
@@ -73,15 +106,26 @@ export default function CreateAssignmentPage(){
         max_score:Number(fd.get("max_score")||10),
         allow_late_submission:fd.get("allow_late_submission")==="on",
         allow_resubmission:fd.get("allow_resubmission")==="on"
-      });
+      }).select("id").single();
 
-      if(error)throw error;
+      if(createError)throw createError;
+      if(!created?.id)throw new Error("ระบบสร้างงานไม่สำเร็จ");
+      createdId=created.id;
+
+      if(files.length){
+        await uploadAssignmentAttachments({
+          assignmentId:created.id,
+          teacherId:user.id,
+          files
+        });
+      }
 
       toast("สร้างงานแล้ว",`เพิ่มในวิชา ${course?.name||""} เรียบร้อย`,"success");
-
-      // ไปหน้าจัดการงานของวิชาที่เพิ่งสร้างทันที
       navigate(`/teacher/assignments/course/${courseId}`,{replace:true});
     }catch(err){
+      if(createdId){
+        await supabase.from("assignments").delete().eq("id",createdId);
+      }
       const msg=errText(err);
       setError(msg);
       toast("สร้างงานไม่สำเร็จ",msg,"error");
@@ -96,16 +140,14 @@ export default function CreateAssignmentPage(){
     <header className="page-header">
       <div>
         <h1>สร้างงานใหม่</h1>
-        <p>เลือกรายวิชา แล้วกำหนดรายละเอียดงานได้จากหน้านี้เลย</p>
+        <p>เพิ่มข้อความ ไฟล์ประกอบ และลิงก์สำหรับนักเรียนได้ในงานเดียว</p>
       </div>
     </header>
 
     {error&&<div className="error">{error}</div>}
 
     {courses.length===0
-      ? <div className="empty card section">
-          ยังไม่มีรายวิชา กรุณาสร้างรายวิชาก่อน
-        </div>
+      ? <div className="empty card section">ยังไม่มีรายวิชา กรุณาสร้างรายวิชาก่อน</div>
       : <form className="card form section" onSubmit={create}>
           <label className="field">
             <span>รายวิชา</span>
@@ -128,14 +170,26 @@ export default function CreateAssignmentPage(){
             </select>
           </label>
 
-          <label className="field">
-            <span>คำอธิบาย</span>
-            <textarea name="description" rows={3}/>
-          </label>
+          <RichTextEditor
+            name="description_html"
+            label="คำอธิบาย (ไม่บังคับ)"
+            minHeight={110}
+            hint="เว้นว่างได้ หากต้องการใช้เฉพาะหัวข้องานและคำสั่ง"
+          />
+
+          <RichTextEditor
+            name="instructions_html"
+            label="คำสั่ง"
+            minHeight={180}
+            hint="ใช้ตัวหนา หัวข้อ รายการ สี และการจัดวางข้อความเพื่อเน้นคำสั่งสำคัญได้"
+          />
+
+          <AssignmentLinksEditor/>
 
           <label className="field">
-            <span>คำสั่ง</span>
-            <textarea name="instructions" rows={4}/>
+            <span>ไฟล์ประกอบการทำงาน (ไม่บังคับ)</span>
+            <input type="file" name="assignment_files" multiple accept={FILE_ACCEPT}/>
+            <small className="field-hint">สูงสุด 10 ไฟล์ และไม่เกิน 50 MB ต่อไฟล์</small>
           </label>
 
           <div className="two-col">

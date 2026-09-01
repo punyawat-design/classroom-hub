@@ -8,11 +8,24 @@ import { useToast } from "../../context/ToastContext";
 import { useConfirm } from "../../context/ConfirmContext";
 import { Status } from "../../lib/status";
 import { FILE_ACCEPT, validateSubmissionFiles } from "../../lib/fileRules";
+import { plainTextToHtml,sanitizeRichHtml } from "../../lib/richText";
+
+function linksOf(value:any){
+  if(!Array.isArray(value))return [];
+  return value
+    .map(x=>({title:String(x?.title||""),url:String(x?.url||"")}))
+    .filter(x=>x.url);
+}
+
+function htmlOf(html?:string|null,plain?:string|null){
+  return sanitizeRichHtml(html?.trim()?html:plainTextToHtml(plain));
+}
 
 export default function StudentAssignmentDetail(){
   const {id=""}=useParams();
   const {user}=useAuth();
   const [a,setA]=useState<any>(null);
+  const [assignmentFiles,setAssignmentFiles]=useState<any[]>([]);
   const [submission,setSubmission]=useState<any>(null);
   const [files,setFiles]=useState<any[]>([]);
   const [computedStatus,setComputedStatus]=useState<Status>("NOT_STARTED");
@@ -24,11 +37,21 @@ export default function StudentAssignmentDetail(){
   async function load(){
     if(!user||!id)return;
 
-    const [{data:assignment,error:ae},{data:sub,error:se},{data:overview,error:oe}]=await Promise.all([
+    const [
+      {data:assignment,error:ae},
+      {data:resourceFiles,error:rfe},
+      {data:sub,error:se},
+      {data:overview,error:oe}
+    ]=await Promise.all([
       supabase.from("assignments")
         .select("*,courses(name,archived_at),classrooms(name)")
         .eq("id",id)
         .single(),
+
+      supabase.from("assignment_attachments")
+        .select("id,file_name,storage_path,file_size,file_type,uploaded_at")
+        .eq("assignment_id",id)
+        .order("uploaded_at"),
 
       supabase.from("submissions")
         .select("*")
@@ -39,12 +62,13 @@ export default function StudentAssignmentDetail(){
       supabase.rpc("student_assignment_overview",{p_student_id:user.id})
     ]);
 
-    if(ae||se||oe){
-      setMessage(errText(ae||se||oe));
+    if(ae||rfe||se||oe){
+      setMessage(errText(ae||rfe||se||oe));
       return;
     }
 
     setA(assignment);
+    setAssignmentFiles(resourceFiles||[]);
     setSubmission(sub);
 
     const ov=(overview||[]).find((x:any)=>x.assignment_id===id);
@@ -69,6 +93,21 @@ export default function StudentAssignmentDetail(){
   }
 
   useEffect(()=>{load()},[user,id]);
+
+  async function openAssignmentFile(path:string){
+    const {data,error}=await supabase.storage
+      .from("assignment-files")
+      .createSignedUrl(path,180);
+
+    if(error){
+      const msg=errText(error);
+      setMessage(msg);
+      toast("เปิดไฟล์ประกอบไม่ได้",msg,"error");
+      return;
+    }
+
+    window.open(data.signedUrl,"_blank","noopener,noreferrer");
+  }
 
   async function start(){
     if(!user||busy)return;
@@ -133,7 +172,6 @@ export default function StudentAssignmentDetail(){
     const uploadedPaths:string[]=[];
 
     try{
-      // 1) Backend verifies enrollment/access and prepares the submission.
       const {data:submissionId,error:prepareError}=await supabase.rpc(
         "student_submit_prepare_v3",
         {
@@ -146,7 +184,6 @@ export default function StudentAssignmentDetail(){
       if(prepareError)throw prepareError;
       if(!submissionId)throw new Error("ระบบสร้างรายการส่งงานไม่สำเร็จ");
 
-      // 2) Upload files. Storage permission only checks the student's own folder.
       for(const file of uploadFiles){
         const unique =
           typeof crypto!=="undefined" && "randomUUID" in crypto
@@ -167,8 +204,6 @@ export default function StudentAssignmentDetail(){
 
         uploadedPaths.push(uploaded.path);
 
-        // 3) File metadata is written through a SECURITY DEFINER RPC,
-        //    so old RLS policies cannot silently block new students.
         const {error:metaError}=await supabase.rpc(
           "student_register_submission_file_v3",
           {
@@ -183,7 +218,6 @@ export default function StudentAssignmentDetail(){
         if(metaError)throw metaError;
       }
 
-      // 4) Only now mark the submission as WAITING_REVIEW / LATE.
       const {data:finalStatus,error:finishError}=await supabase.rpc(
         "student_submit_finish_v3",
         {p_assignment_id:id}
@@ -202,7 +236,6 @@ export default function StudentAssignmentDetail(){
       form.reset();
       await load();
     }catch(error){
-      // Delete files uploaded during this failed attempt.
       if(uploadedPaths.length){
         await supabase.storage.from("submissions").remove(uploadedPaths);
       }
@@ -294,6 +327,10 @@ export default function StudentAssignmentDetail(){
 
   if(!a)return <div>{message||"กำลังโหลด..."}</div>;
 
+  const resourceLinks=linksOf(a.resource_links);
+  const descriptionHtml=htmlOf(a.description_html,a.description);
+  const instructionsHtml=htmlOf(a.instructions_html,a.instructions);
+
   return <>
     <Link className="back-link" to="/student/assignments">← กลับไปงานของฉัน</Link>
 
@@ -308,11 +345,46 @@ export default function StudentAssignmentDetail(){
     {message&&<div className="error">{message}</div>}
 
     <section className="card section">
-      <h2>รายละเอียด</h2>
-      <p>{a.description||"-"}</p>
+      {descriptionHtml&&<>
+        <h2>รายละเอียด</h2>
+        <div className="rich-text-content" dangerouslySetInnerHTML={{__html:descriptionHtml}}/>
+      </>}
 
-      <h3>คำสั่ง</h3>
-      <p className="preline">{a.instructions||"-"}</p>
+      {instructionsHtml&&<>
+        <h3 className={descriptionHtml?"assignment-instruction-title":""}>คำสั่ง</h3>
+        <div className="rich-text-content" dangerouslySetInnerHTML={{__html:instructionsHtml}}/>
+      </>}
+
+      {!descriptionHtml&&!instructionsHtml&&<div className="muted">ครูไม่ได้เพิ่มรายละเอียดเพิ่มเติมสำหรับงานนี้</div>}
+
+      {(assignmentFiles.length>0||resourceLinks.length>0)&&<div className="assignment-resources">
+        <h3>ไฟล์และลิงก์ประกอบการทำงาน</h3>
+
+        {assignmentFiles.length>0&&<div className="assignment-resource-list">
+          {assignmentFiles.map(file=><button
+            key={file.id}
+            type="button"
+            className="assignment-resource-card"
+            onClick={()=>openAssignmentFile(file.storage_path)}
+          >
+            <span className="resource-icon">📎</span>
+            <span><b>{file.file_name}</b><small>กดเพื่อเปิดหรือดาวน์โหลด</small></span>
+          </button>)}
+        </div>}
+
+        {resourceLinks.length>0&&<div className="assignment-resource-list">
+          {resourceLinks.map((link:any,index:number)=><a
+            key={`${link.url}-${index}`}
+            className="assignment-resource-card"
+            href={link.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span className="resource-icon">🔗</span>
+            <span><b>{link.title||`ลิงก์ประกอบ ${index+1}`}</b><small>{link.url}</small></span>
+          </a>)}
+        </div>}
+      </div>}
 
       <div className="info-grid">
         <div><span>เปิดงาน</span><b>{thaiDate(a.open_at)}</b></div>
@@ -342,12 +414,7 @@ export default function StudentAssignmentDetail(){
 
       {submission.submission_link&&
         <p>
-          <a
-            className="text-link"
-            href={submission.submission_link}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a className="text-link" href={submission.submission_link} target="_blank" rel="noreferrer">
             เปิดลิงก์ที่ส่ง
           </a>
         </p>
@@ -355,11 +422,7 @@ export default function StudentAssignmentDetail(){
 
       <div className="file-list">
         {files.map(f=>
-          <button
-            key={f.id}
-            className="btn ghost"
-            onClick={()=>openFile(f.storage_path)}
-          >
+          <button key={f.id} className="btn ghost" onClick={()=>openFile(f.storage_path)}>
             📎 {f.file_name}
           </button>
         )}
@@ -380,33 +443,34 @@ export default function StudentAssignmentDetail(){
     {a.courses?.archived_at
       ? <div className="notice section">รายวิชานี้จบแล้ว จึงปิดการส่งงานใหม่</div>
       : <form className="card form section" onSubmit={submit}>
-      <h2>{submission?"ส่งงาน/ส่งแก้ไข":"ส่งงาน"}</h2>
+        <h2>{submission?"ส่งงาน/ส่งแก้ไข":"ส่งงาน"}</h2>
 
-      <label className="field">
-        <span>ไฟล์งาน (เลือกได้หลายไฟล์)</span>
-        <input name="files" type="file" multiple accept={FILE_ACCEPT} disabled={busy}/>
-      </label>
+        <label className="field">
+          <span>ไฟล์งาน (เลือกได้หลายไฟล์)</span>
+          <input name="files" type="file" multiple accept={FILE_ACCEPT} disabled={busy}/>
+        </label>
 
-      <div className="hint">ส่งได้สูงสุด 10 ไฟล์ • ไม่เกิน 20 MB ต่อไฟล์</div>
+        <div className="hint">ส่งได้สูงสุด 10 ไฟล์ • ไม่เกิน 20 MB ต่อไฟล์</div>
 
-      <label className="field">
-        <span>ลิงก์ผลงาน</span>
-        <input
-          name="submission_link"
-          type="url"
-          placeholder="Google Drive / GitHub / Canva / เว็บไซต์"
-          disabled={busy}
-        />
-      </label>
+        <label className="field">
+          <span>ลิงก์ผลงาน</span>
+          <input
+            name="submission_link"
+            type="url"
+            placeholder="Google Drive / GitHub / Canva / เว็บไซต์"
+            disabled={busy}
+          />
+        </label>
 
-      <label className="field">
-        <span>หมายเหตุถึงครู</span>
-        <textarea name="student_note" rows={3} disabled={busy}/>
-      </label>
+        <label className="field">
+          <span>หมายเหตุถึงครู</span>
+          <textarea name="student_note" rows={3} disabled={busy}/>
+        </label>
 
-      <button className="btn primary" disabled={busy}>
-        {busy?"กำลังส่งงาน...":"ยืนยันส่งงาน"}
-      </button>
-    </form>}
+        <button className="btn primary" disabled={busy}>
+          {busy?"กำลังส่งงาน...":"ยืนยันส่งงาน"}
+        </button>
+      </form>
+    }
   </>;
 }

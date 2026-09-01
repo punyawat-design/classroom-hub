@@ -7,6 +7,12 @@ import { useToast } from "../../context/ToastContext";
 
 const DEFAULT_QUOTA_GB=1;
 
+function bucketLabel(bucket:string){
+  if(bucket==="materials")return "สื่อการสอน";
+  if(bucket==="assignment-files")return "ไฟล์ประกอบงาน";
+  return "งานนักเรียน";
+}
+
 export default function StorageUsagePage(){
   const [data,setData]=useState<any|null>(null);
   const [busy,setBusy]=useState(false);
@@ -34,7 +40,7 @@ export default function StorageUsagePage(){
 
   return <>
     <header className="page-header">
-      <div><h1>พื้นที่ไฟล์</h1><p>ดูพื้นที่สื่อการสอนและไฟล์งานนักเรียนที่เกี่ยวกับบัญชีครูนี้</p></div>
+      <div><h1>พื้นที่ไฟล์</h1><p>รวมสื่อการสอน ไฟล์ประกอบโจทย์ และไฟล์งานนักเรียนของบัญชีครูนี้</p></div>
       <button className="btn ghost" onClick={load} disabled={busy}><RefreshCw size={17}/> {busy?"กำลังโหลด...":"รีเฟรช"}</button>
     </header>
 
@@ -46,16 +52,16 @@ export default function StorageUsagePage(){
 
     <section className="stats-grid">
       <div className="stat-card"><span>สื่อการสอน</span><b>{formatBytes(Number(data?.materials_bytes||0))}</b></div>
+      <div className="stat-card"><span>ไฟล์ประกอบงาน</span><b>{formatBytes(Number(data?.assignment_files_bytes||0))}</b></div>
       <div className="stat-card"><span>งานนักเรียน</span><b>{formatBytes(Number(data?.submissions_bytes||0))}</b></div>
-      <div className="stat-card"><span>จำนวนไฟล์</span><b>{Number(data?.file_count||0)}</b></div>
-      <div className="stat-card"><span>ไฟล์ใหญ่สุด</span><b>{formatBytes(Number(data?.largest_files?.[0]?.size||0))}</b></div>
+      <div className="stat-card"><span>จำนวนไฟล์ทั้งหมด</span><b>{Number(data?.file_count||0)}</b></div>
     </section>
 
     <div className="table-card section"><table>
       <thead><tr><th>ไฟล์ขนาดใหญ่</th><th>ประเภท</th><th>ขนาด</th><th>วันที่</th></tr></thead>
-      <tbody>{(data?.largest_files||[]).map((f:any,i:number)=><tr key={`${f.bucket}-${f.name}-${i}`}><td className="storage-path">{f.name}</td><td>{f.bucket==="materials"?"สื่อการสอน":"งานนักเรียน"}</td><td>{formatBytes(Number(f.size||0))}</td><td>{f.created_at?new Date(f.created_at).toLocaleDateString("th-TH"):"-"}</td></tr>)}</tbody>
+      <tbody>{(data?.largest_files||[]).map((f:any,i:number)=><tr key={`${f.bucket}-${f.name}-${i}`}><td className="storage-path">{f.name}</td><td>{bucketLabel(f.bucket)}</td><td>{formatBytes(Number(f.size||0))}</td><td>{f.created_at?new Date(f.created_at).toLocaleDateString("th-TH"):"-"}</td></tr>)}</tbody>
     </table>{!data?.largest_files?.length&&<div className="empty">ยังไม่มีไฟล์</div>}</div>
 
-    <div className="notice section">ระบบจำกัดไฟล์งานนักเรียนไม่เกิน 20 MB/ไฟล์ และสื่อการสอนไม่เกิน 50 MB/ไฟล์</div>
+    <div className="notice section">งานนักเรียนไม่เกิน 20 MB/ไฟล์ • สื่อการสอนและไฟล์ประกอบโจทย์ไม่เกิน 50 MB/ไฟล์</div>
   </>;
 }
