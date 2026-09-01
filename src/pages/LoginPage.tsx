@@ -13,63 +13,107 @@ export default function LoginPage() {
   const [studentCode,setStudentCode] = useState("");
   const [error,setError] = useState("");
   const [busy,setBusy] = useState(false);
-  const {profile,loading} = useAuth();
+
+  const {profile,loading,refreshProfile} = useAuth();
   const {toast}=useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!loading && profile) navigate(profile.role==="teacher"?"/teacher":"/student",{replace:true});
+    if (!loading && profile) {
+      navigate(profile.role==="teacher"?"/teacher":"/student",{replace:true});
+    }
   }, [profile,loading,navigate]);
+
+  async function ensureProfile(user:any) {
+    const {data:existing,error:readError}=await supabase
+      .from("profiles")
+      .select("id,full_name,role,student_code")
+      .eq("id",user.id)
+      .maybeSingle();
+
+    if(readError) throw readError;
+    if(existing) return existing;
+
+    const meta=user.user_metadata||{};
+    const payload={
+      id:user.id,
+      full_name:String(meta.full_name||user.email?.split("@")[0]||"นักเรียน"),
+      role:"student" as const,
+      student_code:String(meta.student_code||"")||null
+    };
+
+    const {data:created,error:createError}=await supabase
+      .from("profiles")
+      .insert(payload)
+      .select("id,full_name,role,student_code")
+      .single();
+
+    if(createError) throw createError;
+    return created;
+  }
 
   async function login(e:React.FormEvent) {
     e.preventDefault();
-    setBusy(true); setError("");
-    const {data,error} = await supabase.auth.signInWithPassword({email,password});
-    if (error) {
-      setError(errText(error));
-    } else {
-      // If a confirmed student signup has no profile yet, repair it from Auth metadata.
-      if(data.user){
-        const {data:existing}=await supabase.from("profiles").select("id,role,student_code").eq("id",data.user.id).maybeSingle();
-        if(!existing){
-          const meta=data.user.user_metadata||{};
-          await supabase.from("profiles").insert({
-            id:data.user.id,
-            full_name:String(meta.full_name||data.user.email?.split("@")[0]||"นักเรียน"),
-            role:"student",
-            student_code:String(meta.student_code||"")||null
-          });
-        }
-      }
-      toast("เข้าสู่ระบบสำเร็จ","ยินดีต้อนรับกลับ","success");
+    setBusy(true);
+    setError("");
+
+    try {
+      const {data,error} = await supabase.auth.signInWithPassword({email,password});
+      if (error || !data.user) throw error || new Error("เข้าสู่ระบบไม่สำเร็จ");
+
+      // ดึง/สร้าง profile ให้พร้อมก่อนเปลี่ยนหน้า
+      const userProfile = await ensureProfile(data.user);
+
+      // อัปเดต AuthContext เพื่อป้องกันหน้า ProtectedRoute เด้งกลับ Login
+      await refreshProfile();
+
+      toast("เข้าสู่ระบบสำเร็จ","กำลังเข้าสู่หน้าหลัก","success");
+
+      // เปลี่ยนหน้าทันที ไม่ต้องรอ useEffect
+      navigate(userProfile.role==="teacher"?"/teacher":"/student",{replace:true});
+    } catch (err) {
+      setError(errText(err));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function signup(e:React.FormEvent) {
     e.preventDefault();
-    setBusy(true); setError("");
-    if(password.length<6){setError("รหัสผ่านควรมีอย่างน้อย 6 ตัวอักษร");setBusy(false);return;}
-    const {data,error}=await supabase.auth.signUp({
-      email,password,
-      options:{data:{full_name:fullName,student_code:studentCode}}
-    });
-    if(error){setError(errText(error));setBusy(false);return;}
+    setBusy(true);
+    setError("");
 
-    // Backup for projects that do not require email confirmation.
-    if(data.session && data.user){
-      await supabase.from("profiles").upsert({
-        id:data.user.id,full_name:fullName,role:"student",student_code:studentCode
-      },{onConflict:"id"});
-    }
+    try {
+      if(password.length<6) throw new Error("รหัสผ่านควรมีอย่างน้อย 6 ตัวอักษร");
 
-    if(data.session){
-      toast("สมัครเรียบร้อย","กำลังพาเข้าสู่ระบบ","success");
-    }else{
-      toast("สมัครเรียบร้อย","กรุณาเปิดอีเมลเพื่อยืนยันบัญชีก่อน Login","info");
-      setMode("login");
+      const {data,error}=await supabase.auth.signUp({
+        email,
+        password,
+        options:{
+          data:{
+            full_name:fullName,
+            student_code:studentCode
+          }
+        }
+      });
+
+      if(error) throw error;
+
+      // ถ้า Supabase ไม่บังคับยืนยัน Email จะมี session และเข้าเว็บได้ทันที
+      if(data.session && data.user){
+        const userProfile=await ensureProfile(data.user);
+        await refreshProfile();
+        toast("สมัครเรียบร้อย","เข้าสู่ระบบให้แล้ว","success");
+        navigate(userProfile.role==="teacher"?"/teacher":"/student",{replace:true});
+      }else{
+        toast("สมัครเรียบร้อย","กรุณายืนยัน Email ก่อน แล้วกลับมาเข้าสู่ระบบ","info");
+        setMode("login");
+      }
+    } catch (err) {
+      setError(errText(err));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   return <div className="login-page">
@@ -96,7 +140,12 @@ export default function LoginPage() {
       <button className="btn primary wide" disabled={busy}>
         {busy?"กำลังดำเนินการ...":mode==="login"?"เข้าสู่ระบบ":"สมัครบัญชีนักเรียน"}
       </button>
-      <div className="hint">{mode==="login"?"ครูและนักเรียนใช้ Email + Password เดียวกัน":"การสมัครจากหน้านี้จะสร้างบัญชีเป็นนักเรียนเท่านั้น"}</div>
+
+      <div className="hint">
+        {mode==="login"
+          ?"ครูและนักเรียนใช้ Email + Password เดียวกัน"
+          :"สมัครจากหน้านี้จะเป็นบัญชีนักเรียน"}
+      </div>
     </form>
   </div>;
 }
