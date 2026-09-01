@@ -28,17 +28,18 @@ export default function StudentAssignmentDetail(){
         .select("*,courses(name),classrooms(name)")
         .eq("id",id)
         .single(),
+
       supabase.from("submissions")
         .select("*")
         .eq("assignment_id",id)
         .eq("student_id",user.id)
         .maybeSingle(),
+
       supabase.rpc("student_assignment_overview",{p_student_id:user.id})
     ]);
 
     if(ae||se||oe){
-      const msg=errText(ae||se||oe);
-      setMessage(msg);
+      setMessage(errText(ae||se||oe));
       return;
     }
 
@@ -46,7 +47,7 @@ export default function StudentAssignmentDetail(){
     setSubmission(sub);
 
     const ov=(overview||[]).find((x:any)=>x.assignment_id===id);
-    setComputedStatus((ov?.computed_status||"NOT_STARTED") as Status);
+    setComputedStatus((ov?.computed_status||sub?.status||"NOT_STARTED") as Status);
 
     if(sub){
       const {data:f,error:fe}=await supabase
@@ -70,13 +71,15 @@ export default function StudentAssignmentDetail(){
 
   async function start(){
     if(!user||busy)return;
+
     setBusy(true);
     setMessage("");
 
     try{
-      const {error}=await supabase.rpc("student_mark_assignment_started",{
+      const {error}=await supabase.rpc("student_mark_assignment_started_v3",{
         p_assignment_id:id
       });
+
       if(error)throw error;
 
       toast("เริ่มทำงานแล้ว","","success");
@@ -104,7 +107,11 @@ export default function StudentAssignmentDetail(){
     const studentNote=String(fd.get("student_note")||"");
 
     if(uploadFiles.length===0&&!submissionLink){
-      toast("ยังไม่มีงานสำหรับส่ง","กรุณาเลือกไฟล์งาน หรือใส่ลิงก์ผลงานอย่างน้อย 1 อย่าง","error");
+      toast(
+        "ยังไม่มีงานสำหรับส่ง",
+        "กรุณาเลือกไฟล์งาน หรือใส่ลิงก์ผลงานอย่างน้อย 1 อย่าง",
+        "error"
+      );
       return;
     }
 
@@ -119,18 +126,20 @@ export default function StudentAssignmentDetail(){
     const uploadedPaths:string[]=[];
 
     try{
-      // Create/prepare the submission row on the database first.
-      // This RPC checks assignment access and bypasses accidental client-side RLS conflicts safely.
-      const {data:submissionId,error:beginError}=await supabase.rpc("student_begin_submission",{
-        p_assignment_id:id,
-        p_student_note:studentNote,
-        p_submission_link:submissionLink||null
-      });
+      // 1) Backend verifies enrollment/access and prepares the submission.
+      const {data:submissionId,error:prepareError}=await supabase.rpc(
+        "student_submit_prepare_v3",
+        {
+          p_assignment_id:id,
+          p_student_note:studentNote,
+          p_submission_link:submissionLink||null
+        }
+      );
 
-      if(beginError)throw beginError;
-      if(!submissionId)throw new Error("ระบบไม่สามารถสร้างรายการส่งงานได้");
+      if(prepareError)throw prepareError;
+      if(!submissionId)throw new Error("ระบบสร้างรายการส่งงานไม่สำเร็จ");
 
-      // Upload all selected files.
+      // 2) Upload files. Storage permission only checks the student's own folder.
       for(const file of uploadFiles){
         const unique =
           typeof crypto!=="undefined" && "randomUUID" in crypto
@@ -139,7 +148,7 @@ export default function StudentAssignmentDetail(){
 
         const path=`${user.id}/${id}/${unique}-${safeFileName(file.name)}`;
 
-        const {data:storageData,error:upError}=await supabase.storage
+        const {data:uploaded,error:uploadError}=await supabase.storage
           .from("submissions")
           .upload(path,file,{
             cacheControl:"3600",
@@ -147,43 +156,46 @@ export default function StudentAssignmentDetail(){
             contentType:file.type||undefined
           });
 
-        if(upError)throw upError;
+        if(uploadError)throw uploadError;
 
-        const actualPath=storageData.path;
-        uploadedPaths.push(actualPath);
+        uploadedPaths.push(uploaded.path);
 
-        const {error:fileError}=await supabase
-          .from("submission_files")
-          .insert({
-            submission_id:submissionId,
-            file_name:file.name,
-            storage_path:actualPath,
-            file_size:file.size,
-            file_type:file.type||null
-          });
+        // 3) File metadata is written through a SECURITY DEFINER RPC,
+        //    so old RLS policies cannot silently block new students.
+        const {error:metaError}=await supabase.rpc(
+          "student_register_submission_file_v3",
+          {
+            p_submission_id:submissionId,
+            p_file_name:file.name,
+            p_storage_path:uploaded.path,
+            p_file_size:file.size,
+            p_file_type:file.type||null
+          }
+        );
 
-        if(fileError)throw fileError;
+        if(metaError)throw metaError;
       }
 
-      // Mark as WAITING_REVIEW/LATE only after every file is uploaded successfully.
-      const {data:finalStatus,error:finalError}=await supabase.rpc("student_finalize_submission",{
-        p_assignment_id:id
-      });
+      // 4) Only now mark the submission as WAITING_REVIEW / LATE.
+      const {data:finalStatus,error:finishError}=await supabase.rpc(
+        "student_submit_finish_v3",
+        {p_assignment_id:id}
+      );
 
-      if(finalError)throw finalError;
+      if(finishError)throw finishError;
 
       toast(
         "ส่งงานเรียบร้อยแล้ว",
         finalStatus==="LATE"
-          ?"ระบบบันทึกเป็นงานส่งล่าช้า และครูสามารถตรวจได้แล้ว"
-          :"ครูสามารถเห็นงานในหน้าตรวจงานได้แล้ว",
+          ?"บันทึกเป็นงานส่งล่าช้า และครูเห็นงานนี้แล้ว"
+          :"สถานะเป็นรอตรวจ และครูเห็นงานนี้แล้ว",
         "success"
       );
 
       form.reset();
       await load();
     }catch(error){
-      // Clean up files uploaded in this attempt if something fails.
+      // Delete files uploaded during this failed attempt.
       if(uploadedPaths.length){
         await supabase.storage.from("submissions").remove(uploadedPaths);
       }
@@ -200,18 +212,26 @@ export default function StudentAssignmentDetail(){
     if(!submission||busy)return;
 
     if(submission.status==="GRADED"){
-      toast("ลบไม่ได้","งานนี้ครูตรวจและให้คะแนนแล้ว กรุณาติดต่อครูหากต้องการส่งใหม่","error");
+      toast(
+        "ลบไม่ได้",
+        "งานนี้ครูตรวจและให้คะแนนแล้ว กรุณาติดต่อครูหากต้องการส่งใหม่",
+        "error"
+      );
       return;
     }
 
     if(!a.allow_resubmission){
-      toast("ลบไม่ได้","ครูไม่ได้เปิดให้ส่งงานใหม่สำหรับงานนี้","error");
+      toast(
+        "ลบไม่ได้",
+        "ครูไม่ได้เปิดให้ส่งงานใหม่สำหรับงานนี้",
+        "error"
+      );
       return;
     }
 
     const ok=await confirm({
       title:"ลบงานที่ส่งแล้ว?",
-      message:"ไฟล์ ลิงก์ และสถานะการส่งครั้งนี้จะถูกลบ แล้วคุณสามารถส่งใหม่ได้",
+      message:"ไฟล์และข้อมูลการส่งครั้งนี้จะถูกลบ แล้วสามารถส่งใหม่ได้",
       confirmText:"ลบเพื่อส่งใหม่",
       danger:true
     });
@@ -230,14 +250,14 @@ export default function StudentAssignmentDetail(){
         if(storageError)throw storageError;
       }
 
-      const {error}=await supabase
-        .from("submissions")
-        .delete()
-        .eq("id",submission.id);
+      const {error}=await supabase.rpc(
+        "student_delete_submission_v3",
+        {p_assignment_id:id}
+      );
 
       if(error)throw error;
 
-      toast("ลบงานที่ส่งแล้ว","ตอนนี้สามารถเลือกไฟล์และส่งใหม่ได้","success");
+      toast("ลบงานแล้ว","สามารถส่งงานใหม่ได้ทันที","success");
       setSubmission(null);
       setFiles([]);
       setComputedStatus("NOT_STARTED");
@@ -303,6 +323,7 @@ export default function StudentAssignmentDetail(){
     {submission&&<section className="card section">
       <div className="submission-head">
         <h2>การส่งล่าสุด</h2>
+
         {submission.status!=="GRADED"&&a.allow_resubmission&&
           <button className="btn danger" onClick={deleteSubmission} disabled={busy}>
             ลบงานนี้เพื่อส่งใหม่
@@ -314,7 +335,12 @@ export default function StudentAssignmentDetail(){
 
       {submission.submission_link&&
         <p>
-          <a className="text-link" href={submission.submission_link} target="_blank" rel="noreferrer">
+          <a
+            className="text-link"
+            href={submission.submission_link}
+            target="_blank"
+            rel="noreferrer"
+          >
             เปิดลิงก์ที่ส่ง
           </a>
         </p>
@@ -322,7 +348,11 @@ export default function StudentAssignmentDetail(){
 
       <div className="file-list">
         {files.map(f=>
-          <button key={f.id} className="btn ghost" onClick={()=>openFile(f.storage_path)}>
+          <button
+            key={f.id}
+            className="btn ghost"
+            onClick={()=>openFile(f.storage_path)}
+          >
             📎 {f.file_name}
           </button>
         )}
