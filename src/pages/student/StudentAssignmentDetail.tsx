@@ -16,81 +16,194 @@ export default function StudentAssignmentDetail(){
   const [files,setFiles]=useState<any[]>([]);
   const [computedStatus,setComputedStatus]=useState<Status>("NOT_STARTED");
   const [message,setMessage]=useState("");
+  const [busy,setBusy]=useState(false);
   const {toast}=useToast();
   const {confirm}=useConfirm();
 
   async function load(){
     if(!user||!id)return;
-    const [{data:assignment,error:ae},{data:sub,error:se},{data:overview}]=await Promise.all([
-      supabase.from("assignments").select("*,courses(name),classrooms(name)").eq("id",id).single(),
-      supabase.from("submissions").select("*").eq("assignment_id",id).eq("student_id",user.id).maybeSingle(),
+
+    const [{data:assignment,error:ae},{data:sub,error:se},{data:overview,error:oe}]=await Promise.all([
+      supabase.from("assignments")
+        .select("*,courses(name),classrooms(name)")
+        .eq("id",id)
+        .single(),
+      supabase.from("submissions")
+        .select("*")
+        .eq("assignment_id",id)
+        .eq("student_id",user.id)
+        .maybeSingle(),
       supabase.rpc("student_assignment_overview",{p_student_id:user.id})
     ]);
-    if(ae||se){setMessage(errText(ae||se));return;}
-    setA(assignment);setSubmission(sub);
+
+    if(ae||se||oe){
+      const msg=errText(ae||se||oe);
+      setMessage(msg);
+      return;
+    }
+
+    setA(assignment);
+    setSubmission(sub);
+
     const ov=(overview||[]).find((x:any)=>x.assignment_id===id);
-    if(ov)setComputedStatus(ov.computed_status);
+    setComputedStatus((ov?.computed_status||"NOT_STARTED") as Status);
+
     if(sub){
-      const {data:f}=await supabase.from("submission_files").select("*").eq("submission_id",sub.id).order("uploaded_at");
-      setFiles(f||[]);
-    } else setFiles([]);
+      const {data:f,error:fe}=await supabase
+        .from("submission_files")
+        .select("*")
+        .eq("submission_id",sub.id)
+        .order("uploaded_at");
+
+      if(fe){
+        setMessage(errText(fe));
+        setFiles([]);
+      }else{
+        setFiles(f||[]);
+      }
+    }else{
+      setFiles([]);
+    }
   }
+
   useEffect(()=>{load()},[user,id]);
 
   async function start(){
-    if(!user)return;
-    const {error}=await supabase.from("submissions").upsert({
-      assignment_id:id,student_id:user.id,status:"IN_PROGRESS",started_at:new Date().toISOString()
-    },{onConflict:"assignment_id,student_id"});
-    if(error)setMessage(errText(error));else load();
+    if(!user||busy)return;
+    setBusy(true);
+    setMessage("");
+
+    try{
+      const {error}=await supabase.rpc("student_mark_assignment_started",{
+        p_assignment_id:id
+      });
+      if(error)throw error;
+
+      toast("เริ่มทำงานแล้ว","","success");
+      await load();
+    }catch(error){
+      const msg=errText(error);
+      setMessage(msg);
+      toast("เริ่มงานไม่สำเร็จ",msg,"error");
+    }finally{
+      setBusy(false);
+    }
   }
 
   async function submit(e:React.FormEvent<HTMLFormElement>){
-    e.preventDefault();setMessage("");
-    if(!user||!a)return;
-    const ok=await confirm({title:"ยืนยันส่งงาน?",message:"ตรวจสอบไฟล์ ลิงก์ และหมายเหตุให้เรียบร้อยก่อนส่ง",confirmText:"ส่งงาน"});
-    if(!ok)return;
-    if(new Date()>new Date(a.due_at)&&!a.allow_late_submission){setMessage("งานนี้ไม่อนุญาตให้ส่งหลังหมดเวลา");return;}
-    if(submission?.submitted_at&&!a.allow_resubmission&&submission.status!=="REVISION_REQUIRED"){setMessage("งานนี้ไม่อนุญาตให้ส่งใหม่");return;}
+    e.preventDefault();
+    if(!user||!a||busy)return;
 
-    const fd=new FormData(e.currentTarget);
-    const input=e.currentTarget.elements.namedItem("files") as HTMLInputElement;
-    const uploadFiles=Array.from(input.files||[]);
-    const now=new Date();
-    const late=now>new Date(a.due_at);
-    const {data:sub,error:subError}=await supabase.from("submissions").upsert({
-      assignment_id:id,student_id:user.id,
-      status:late?"LATE":"WAITING_REVIEW",
-      submitted_at:now.toISOString(),
-      is_late:late,
-      student_note:String(fd.get("student_note")||""),
-      submission_link:String(fd.get("submission_link")||"")||null
-    },{onConflict:"assignment_id,student_id"}).select().single();
-
-    if(subError){setMessage(errText(subError));return;}
-
-    for(const file of uploadFiles){
-      const path=`${user.id}/${id}/${Date.now()}-${safeFileName(file.name)}`;
-      const {error:upError}=await supabase.storage.from("submissions").upload(path,file);
-      if(upError){setMessage(errText(upError));return;}
-      const {error:fileError}=await supabase.from("submission_files").insert({
-        submission_id:sub.id,file_name:file.name,storage_path:path,file_size:file.size,file_type:file.type
-      });
-      if(fileError){setMessage(errText(fileError));return;}
-    }
     setMessage("");
-    toast("ส่งงานเรียบร้อยแล้ว",late?"ระบบบันทึกว่าเป็นงานส่งล่าช้า":"ครูจะเห็นงานในหน้ารอตรวจ","success");
-    e.currentTarget.reset();
-    load();
+
+    const form=e.currentTarget;
+    const fd=new FormData(form);
+    const input=form.elements.namedItem("files") as HTMLInputElement;
+    const uploadFiles=Array.from(input.files||[]);
+    const submissionLink=String(fd.get("submission_link")||"").trim();
+    const studentNote=String(fd.get("student_note")||"");
+
+    if(uploadFiles.length===0&&!submissionLink){
+      toast("ยังไม่มีงานสำหรับส่ง","กรุณาเลือกไฟล์งาน หรือใส่ลิงก์ผลงานอย่างน้อย 1 อย่าง","error");
+      return;
+    }
+
+    const ok=await confirm({
+      title:"ยืนยันส่งงาน?",
+      message:`กำลังส่ง ${uploadFiles.length} ไฟล์${submissionLink?" พร้อมลิงก์ผลงาน":""}`,
+      confirmText:"ส่งงาน"
+    });
+    if(!ok)return;
+
+    setBusy(true);
+    const uploadedPaths:string[]=[];
+
+    try{
+      // Create/prepare the submission row on the database first.
+      // This RPC checks assignment access and bypasses accidental client-side RLS conflicts safely.
+      const {data:submissionId,error:beginError}=await supabase.rpc("student_begin_submission",{
+        p_assignment_id:id,
+        p_student_note:studentNote,
+        p_submission_link:submissionLink||null
+      });
+
+      if(beginError)throw beginError;
+      if(!submissionId)throw new Error("ระบบไม่สามารถสร้างรายการส่งงานได้");
+
+      // Upload all selected files.
+      for(const file of uploadFiles){
+        const unique =
+          typeof crypto!=="undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+        const path=`${user.id}/${id}/${unique}-${safeFileName(file.name)}`;
+
+        const {data:storageData,error:upError}=await supabase.storage
+          .from("submissions")
+          .upload(path,file,{
+            cacheControl:"3600",
+            upsert:false,
+            contentType:file.type||undefined
+          });
+
+        if(upError)throw upError;
+
+        const actualPath=storageData.path;
+        uploadedPaths.push(actualPath);
+
+        const {error:fileError}=await supabase
+          .from("submission_files")
+          .insert({
+            submission_id:submissionId,
+            file_name:file.name,
+            storage_path:actualPath,
+            file_size:file.size,
+            file_type:file.type||null
+          });
+
+        if(fileError)throw fileError;
+      }
+
+      // Mark as WAITING_REVIEW/LATE only after every file is uploaded successfully.
+      const {data:finalStatus,error:finalError}=await supabase.rpc("student_finalize_submission",{
+        p_assignment_id:id
+      });
+
+      if(finalError)throw finalError;
+
+      toast(
+        "ส่งงานเรียบร้อยแล้ว",
+        finalStatus==="LATE"
+          ?"ระบบบันทึกเป็นงานส่งล่าช้า และครูสามารถตรวจได้แล้ว"
+          :"ครูสามารถเห็นงานในหน้าตรวจงานได้แล้ว",
+        "success"
+      );
+
+      form.reset();
+      await load();
+    }catch(error){
+      // Clean up files uploaded in this attempt if something fails.
+      if(uploadedPaths.length){
+        await supabase.storage.from("submissions").remove(uploadedPaths);
+      }
+
+      const msg=errText(error);
+      setMessage(msg);
+      toast("ส่งงานไม่สำเร็จ",msg,"error");
+    }finally{
+      setBusy(false);
+    }
   }
 
-
   async function deleteSubmission(){
-    if(!submission)return;
+    if(!submission||busy)return;
+
     if(submission.status==="GRADED"){
       toast("ลบไม่ได้","งานนี้ครูตรวจและให้คะแนนแล้ว กรุณาติดต่อครูหากต้องการส่งใหม่","error");
       return;
     }
+
     if(!a.allow_resubmission){
       toast("ลบไม่ได้","ครูไม่ได้เปิดให้ส่งงานใหม่สำหรับงานนี้","error");
       return;
@@ -104,53 +217,155 @@ export default function StudentAssignmentDetail(){
     });
     if(!ok)return;
 
-    const paths=files.map((f:any)=>f.storage_path).filter(Boolean);
-    if(paths.length){
-      const {error:storageError}=await supabase.storage.from("submissions").remove(paths);
-      if(storageError){toast("ลบไฟล์ไม่สำเร็จ",errText(storageError),"error");return;}
+    setBusy(true);
+
+    try{
+      const paths=files.map((f:any)=>f.storage_path).filter(Boolean);
+
+      if(paths.length){
+        const {error:storageError}=await supabase.storage
+          .from("submissions")
+          .remove(paths);
+
+        if(storageError)throw storageError;
+      }
+
+      const {error}=await supabase
+        .from("submissions")
+        .delete()
+        .eq("id",submission.id);
+
+      if(error)throw error;
+
+      toast("ลบงานที่ส่งแล้ว","ตอนนี้สามารถเลือกไฟล์และส่งใหม่ได้","success");
+      setSubmission(null);
+      setFiles([]);
+      setComputedStatus("NOT_STARTED");
+      await load();
+    }catch(error){
+      const msg=errText(error);
+      setMessage(msg);
+      toast("ลบงานไม่สำเร็จ",msg,"error");
+    }finally{
+      setBusy(false);
     }
-
-    const {error}=await supabase.from("submissions").delete().eq("id",submission.id);
-    if(error){toast("ลบงานไม่สำเร็จ",errText(error),"error");return;}
-
-    toast("ลบงานที่ส่งแล้ว","ตอนนี้สามารถเลือกไฟล์และส่งใหม่ได้","success");
-    setSubmission(null);setFiles([]);setComputedStatus("NOT_STARTED");
-    load();
   }
 
   async function openFile(path:string){
-    const {data,error}=await supabase.storage.from("submissions").createSignedUrl(path,120);
-    if(error)setMessage(errText(error)); else window.open(data.signedUrl,"_blank","noopener,noreferrer");
+    const {data,error}=await supabase.storage
+      .from("submissions")
+      .createSignedUrl(path,120);
+
+    if(error){
+      const msg=errText(error);
+      setMessage(msg);
+      toast("เปิดไฟล์ไม่ได้",msg,"error");
+    }else{
+      window.open(data.signedUrl,"_blank","noopener,noreferrer");
+    }
   }
 
   if(!a)return <div>{message||"กำลังโหลด..."}</div>;
 
   return <>
     <Link className="back-link" to="/student/assignments">← กลับไปงานของฉัน</Link>
-    <header className="page-header"><div><h1>{a.title}</h1><p>{a.courses?.name} • {a.classrooms?.name}</p></div><StatusBadge status={computedStatus}/></header>
-    {message&&<div className={message.includes("เรียบร้อย")?"success":"notice"}>{message}</div>}
-    <section className="card section">
-      <h2>รายละเอียด</h2><p>{a.description||"-"}</p>
-      <h3>คำสั่ง</h3><p className="preline">{a.instructions||"-"}</p>
-      <div className="info-grid"><div><span>เปิดงาน</span><b>{thaiDate(a.open_at)}</b></div><div><span>กำหนดส่ง</span><b>{thaiDate(a.due_at)}</b></div><div><span>คะแนนเต็ม</span><b>{a.max_score}</b></div></div>
-    </section>
-    {!submission&&<button className="btn primary section" onClick={start}>เริ่มทำงาน</button>}
-    {submission&&<section className="card section">
-      <div className="submission-head"><h2>การส่งล่าสุด</h2>
-        {submission.status!=="GRADED"&&a.allow_resubmission&&<button className="btn danger" onClick={deleteSubmission}>ลบงานนี้เพื่อส่งใหม่</button>}
+
+    <header className="page-header">
+      <div>
+        <h1>{a.title}</h1>
+        <p>{a.courses?.name} • {a.classrooms?.name||"ทุกคนในรายวิชา"}</p>
       </div>
+      <StatusBadge status={computedStatus}/>
+    </header>
+
+    {message&&<div className="error">{message}</div>}
+
+    <section className="card section">
+      <h2>รายละเอียด</h2>
+      <p>{a.description||"-"}</p>
+
+      <h3>คำสั่ง</h3>
+      <p className="preline">{a.instructions||"-"}</p>
+
+      <div className="info-grid">
+        <div><span>เปิดงาน</span><b>{thaiDate(a.open_at)}</b></div>
+        <div><span>กำหนดส่ง</span><b>{thaiDate(a.due_at)}</b></div>
+        <div><span>คะแนนเต็ม</span><b>{a.max_score}</b></div>
+      </div>
+    </section>
+
+    {!submission&&
+      <button className="btn primary section" onClick={start} disabled={busy}>
+        {busy?"กำลังเริ่มงาน...":"เริ่มทำงาน"}
+      </button>
+    }
+
+    {submission&&<section className="card section">
+      <div className="submission-head">
+        <h2>การส่งล่าสุด</h2>
+        {submission.status!=="GRADED"&&a.allow_resubmission&&
+          <button className="btn danger" onClick={deleteSubmission} disabled={busy}>
+            ลบงานนี้เพื่อส่งใหม่
+          </button>
+        }
+      </div>
+
       <p>วันที่ส่ง: {thaiDate(submission.submitted_at)}</p>
-      {submission.submission_link&&<p><a className="text-link" href={submission.submission_link} target="_blank" rel="noreferrer">เปิดลิงก์ที่ส่ง</a></p>}
-      <div className="file-list">{files.map(f=><button key={f.id} className="btn ghost" onClick={()=>openFile(f.storage_path)}>📎 {f.file_name}</button>)}</div>
-      {submission.teacher_feedback&&<div className="feedback"><b>Feedback จากครู</b><p>{submission.teacher_feedback}</p></div>}
-      {submission.score!==null&&submission.score!==undefined&&<p><b>คะแนน: {submission.score} / {a.max_score}</b></p>}
+
+      {submission.submission_link&&
+        <p>
+          <a className="text-link" href={submission.submission_link} target="_blank" rel="noreferrer">
+            เปิดลิงก์ที่ส่ง
+          </a>
+        </p>
+      }
+
+      <div className="file-list">
+        {files.map(f=>
+          <button key={f.id} className="btn ghost" onClick={()=>openFile(f.storage_path)}>
+            📎 {f.file_name}
+          </button>
+        )}
+      </div>
+
+      {submission.teacher_feedback&&
+        <div className="feedback">
+          <b>Feedback จากครู</b>
+          <p>{submission.teacher_feedback}</p>
+        </div>
+      }
+
+      {submission.score!==null&&submission.score!==undefined&&
+        <p><b>คะแนน: {submission.score} / {a.max_score}</b></p>
+      }
     </section>}
+
     <form className="card form section" onSubmit={submit}>
       <h2>{submission?"ส่งงาน/ส่งแก้ไข":"ส่งงาน"}</h2>
-      <label className="field"><span>ไฟล์งาน (เลือกได้หลายไฟล์)</span><input name="files" type="file" multiple/></label>
-      <label className="field"><span>ลิงก์ผลงาน</span><input name="submission_link" type="url" placeholder="Google Drive / GitHub / Canva / เว็บไซต์"/></label>
-      <label className="field"><span>หมายเหตุถึงครู</span><textarea name="student_note" rows={3}/></label>
-      <button className="btn primary">ยืนยันส่งงาน</button>
+
+      <label className="field">
+        <span>ไฟล์งาน (เลือกได้หลายไฟล์)</span>
+        <input name="files" type="file" multiple disabled={busy}/>
+      </label>
+
+      <label className="field">
+        <span>ลิงก์ผลงาน</span>
+        <input
+          name="submission_link"
+          type="url"
+          placeholder="Google Drive / GitHub / Canva / เว็บไซต์"
+          disabled={busy}
+        />
+      </label>
+
+      <label className="field">
+        <span>หมายเหตุถึงครู</span>
+        <textarea name="student_note" rows={3} disabled={busy}/>
+      </label>
+
+      <button className="btn primary" disabled={busy}>
+        {busy?"กำลังส่งงาน...":"ยืนยันส่งงาน"}
+      </button>
     </form>
   </>;
 }
