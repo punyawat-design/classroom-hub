@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { errText } from "../lib/utils";
@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [email,setEmail] = useState("");
   const [password,setPassword] = useState("");
   const [fullName,setFullName] = useState("");
+  const [nickname,setNickname] = useState("");
   const [studentCode,setStudentCode] = useState("");
   const [error,setError] = useState("");
   const [busy,setBusy] = useState(false);
@@ -27,7 +28,7 @@ export default function LoginPage() {
   async function ensureProfile(user:any) {
     const {data:existing,error:readError}=await supabase
       .from("profiles")
-      .select("id,full_name,role,student_code")
+      .select("id,full_name,nickname,role,student_code")
       .eq("id",user.id)
       .maybeSingle();
 
@@ -38,6 +39,7 @@ export default function LoginPage() {
     const payload={
       id:user.id,
       full_name:String(meta.full_name||user.email?.split("@")[0]||"นักเรียน"),
+      nickname:String(meta.nickname||"")||null,
       role:"student" as const,
       student_code:String(meta.student_code||"")||null
     };
@@ -45,7 +47,7 @@ export default function LoginPage() {
     const {data:created,error:createError}=await supabase
       .from("profiles")
       .insert(payload)
-      .select("id,full_name,role,student_code")
+      .select("id,full_name,nickname,role,student_code")
       .single();
 
     if(createError) throw createError;
@@ -61,15 +63,10 @@ export default function LoginPage() {
       const {data,error} = await supabase.auth.signInWithPassword({email,password});
       if (error || !data.user) throw error || new Error("เข้าสู่ระบบไม่สำเร็จ");
 
-      // ดึง/สร้าง profile ให้พร้อมก่อนเปลี่ยนหน้า
       const userProfile = await ensureProfile(data.user);
-
-      // อัปเดต AuthContext เพื่อป้องกันหน้า ProtectedRoute เด้งกลับ Login
       await refreshProfile();
 
       toast("เข้าสู่ระบบสำเร็จ","กำลังเข้าสู่หน้าหลัก","success");
-
-      // เปลี่ยนหน้าทันที ไม่ต้องรอ useEffect
       navigate(userProfile.role==="teacher"?"/teacher":"/student",{replace:true});
     } catch (err) {
       setError(errText(err));
@@ -84,22 +81,22 @@ export default function LoginPage() {
     setError("");
 
     try {
-      if(password.length<6) throw new Error("รหัสผ่านควรมีอย่างน้อย 6 ตัวอักษร");
+      if(password.length<8) throw new Error("รหัสผ่านควรมีอย่างน้อย 8 ตัวอักษร");
 
       const {data,error}=await supabase.auth.signUp({
         email,
         password,
         options:{
           data:{
-            full_name:fullName,
-            student_code:studentCode
+            full_name:fullName.trim(),
+            nickname:nickname.trim(),
+            student_code:studentCode.trim()
           }
         }
       });
 
       if(error) throw error;
 
-      // ถ้า Supabase ไม่บังคับยืนยัน Email จะมี session และเข้าเว็บได้ทันที
       if(data.session && data.user){
         const userProfile=await ensureProfile(data.user);
         await refreshProfile();
@@ -131,6 +128,7 @@ export default function LoginPage() {
 
       {mode==="signup"&&<>
         <label className="field"><span>ชื่อ-นามสกุล</span><input value={fullName} onChange={e=>setFullName(e.target.value)} required/></label>
+        <label className="field"><span>ชื่อเล่น</span><input value={nickname} onChange={e=>setNickname(e.target.value)} placeholder="เช่น บอล" required/></label>
         <label className="field"><span>รหัสนักเรียน</span><input value={studentCode} onChange={e=>setStudentCode(e.target.value)} required/></label>
       </>}
 
@@ -140,6 +138,8 @@ export default function LoginPage() {
       <button className="btn primary wide" disabled={busy}>
         {busy?"กำลังดำเนินการ...":mode==="login"?"เข้าสู่ระบบ":"สมัครบัญชีนักเรียน"}
       </button>
+
+      {mode==="login"&&<div className="auth-help"><Link to="/forgot-password">ลืมรหัสผ่าน?</Link></div>}
 
       <div className="hint">
         {mode==="login"

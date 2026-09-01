@@ -11,7 +11,7 @@ export default function MaterialsPage(){
 
   useEffect(()=>{(async()=>{
     const [{data:c,error:ce},{data:m,error:me}]=await Promise.all([
-      supabase.from("courses").select("id,name").order("name"),
+      supabase.from("courses").select("id,name,archived_at").is("archived_at",null).order("name"),
       supabase.from("learning_materials").select("id,course_id")
     ]);
 

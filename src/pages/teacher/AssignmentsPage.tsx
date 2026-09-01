@@ -10,7 +10,7 @@ export default function AssignmentsPage(){
 
   useEffect(()=>{(async()=>{
     const [{data:c,error:ce},{data:a,error:ae}]=await Promise.all([
-      supabase.from("courses").select("id,name,created_at").order("name"),
+      supabase.from("courses").select("id,name,created_at,archived_at").is("archived_at",null).order("name"),
       supabase.from("assignments").select("id,course_id,due_at")
     ]);
     if(ce||ae){

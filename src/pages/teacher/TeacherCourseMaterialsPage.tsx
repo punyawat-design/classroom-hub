@@ -5,6 +5,7 @@ import { errText,safeFileName } from "../../lib/utils";
 import MaterialViewer,{MaterialItem} from "../../components/MaterialViewer";
 import { useToast } from "../../context/ToastContext";
 import { useConfirm } from "../../context/ConfirmContext";
+import { FILE_ACCEPT, validateMaterialFile } from "../../lib/fileRules";
 
 export default function TeacherCourseMaterialsPage(){
   const {courseId=""}=useParams();
@@ -37,6 +38,8 @@ export default function TeacherCourseMaterialsPage(){
   useEffect(()=>{load()},[courseId]);
 
   async function uploadFile(file:File,userId:string){
+    const fileError=validateMaterialFile(file);
+    if(fileError)throw new Error(fileError);
     const path=`${userId}/${courseId}/${Date.now()}-${safeFileName(file.name)}`;
     const {data,error}=await supabase.storage
       .from("materials")
@@ -239,12 +242,11 @@ export default function TeacherCourseMaterialsPage(){
 
         <label className="field">
           <span>อัปโหลดไฟล์จากเครื่อง</span>
-          <input name="file" type="file"
-            accept=".pdf,.zip,.rar,.7z,.doc,.docx,.ppt,.pptx,.xls,.xlsx,image/*,text/plain"/>
+          <input name="file" type="file" accept={FILE_ACCEPT}/>
         </label>
 
         <div className="hint">
-          PDF และรูปภาพเปิดดูในเว็บได้ • ZIP/Office ดาวน์โหลดได้ • สามารถใช้ Google Drive Share Link ได้
+          PDF และรูปภาพเปิดดูในเว็บได้ • ZIP/Office ดาวน์โหลดได้ • ไฟล์อัปโหลดไม่เกิน 50 MB • ใช้ Google Drive Share Link ได้
         </div>
 
         <button className="btn primary" disabled={busy}>
@@ -303,8 +305,7 @@ export default function TeacherCourseMaterialsPage(){
 
           <label className="field">
             <span>เปลี่ยนไฟล์ (ไม่เลือก = ใช้ไฟล์เดิม)</span>
-            <input name="file" type="file"
-              accept=".pdf,.zip,.rar,.7z,.doc,.docx,.ppt,.pptx,.xls,.xlsx,image/*,text/plain"/>
+            <input name="file" type="file" accept={FILE_ACCEPT}/>
           </label>
 
           {editing.file_name&&<div className="notice">ไฟล์ปัจจุบัน: {editing.file_name}</div>}

@@ -16,7 +16,7 @@ export default function CreateAssignmentPage(){
 
   useEffect(()=>{(async()=>{
     const [{data:c,error:ce},{data:r,error:re}]=await Promise.all([
-      supabase.from("courses").select("id,name").order("name"),
+      supabase.from("courses").select("id,name,archived_at").is("archived_at",null).order("name"),
       supabase.from("classrooms").select("id,name").order("name")
     ]);
 

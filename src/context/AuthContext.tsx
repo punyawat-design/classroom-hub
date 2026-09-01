@@ -6,6 +6,7 @@ export type Role = "teacher" | "student";
 export type Profile = {
   id: string;
   full_name: string;
+  nickname?: string | null;
   role: Role;
   student_code?: string | null;
 };
@@ -36,9 +37,10 @@ export function AuthProvider({children}:{children:React.ReactNode}) {
       setLoading(false);
       return;
     }
+
     const {data,error} = await supabase
       .from("profiles")
-      .select("id,full_name,role,student_code")
+      .select("id,full_name,nickname,role,student_code")
       .eq("id",nextUser.id)
       .single();
 

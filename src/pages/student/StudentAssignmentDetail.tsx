@@ -7,6 +7,7 @@ import StatusBadge from "../../components/StatusBadge";
 import { useToast } from "../../context/ToastContext";
 import { useConfirm } from "../../context/ConfirmContext";
 import { Status } from "../../lib/status";
+import { FILE_ACCEPT, validateSubmissionFiles } from "../../lib/fileRules";
 
 export default function StudentAssignmentDetail(){
   const {id=""}=useParams();
@@ -25,7 +26,7 @@ export default function StudentAssignmentDetail(){
 
     const [{data:assignment,error:ae},{data:sub,error:se},{data:overview,error:oe}]=await Promise.all([
       supabase.from("assignments")
-        .select("*,courses(name),classrooms(name)")
+        .select("*,courses(name,archived_at),classrooms(name)")
         .eq("id",id)
         .single(),
 
@@ -112,6 +113,12 @@ export default function StudentAssignmentDetail(){
         "กรุณาเลือกไฟล์งาน หรือใส่ลิงก์ผลงานอย่างน้อย 1 อย่าง",
         "error"
       );
+      return;
+    }
+
+    const fileRuleError=validateSubmissionFiles(uploadFiles);
+    if(fileRuleError){
+      toast("ไฟล์งานไม่ผ่านเงื่อนไข",fileRuleError,"error");
       return;
     }
 
@@ -314,7 +321,7 @@ export default function StudentAssignmentDetail(){
       </div>
     </section>
 
-    {!submission&&
+    {!a.courses?.archived_at&&!submission&&
       <button className="btn primary section" onClick={start} disabled={busy}>
         {busy?"กำลังเริ่มงาน...":"เริ่มทำงาน"}
       </button>
@@ -324,7 +331,7 @@ export default function StudentAssignmentDetail(){
       <div className="submission-head">
         <h2>การส่งล่าสุด</h2>
 
-        {submission.status!=="GRADED"&&a.allow_resubmission&&
+        {submission.status!=="GRADED"&&a.allow_resubmission&&!a.courses?.archived_at&&
           <button className="btn danger" onClick={deleteSubmission} disabled={busy}>
             ลบงานนี้เพื่อส่งใหม่
           </button>
@@ -370,13 +377,17 @@ export default function StudentAssignmentDetail(){
       }
     </section>}
 
-    <form className="card form section" onSubmit={submit}>
+    {a.courses?.archived_at
+      ? <div className="notice section">รายวิชานี้จบแล้ว จึงปิดการส่งงานใหม่</div>
+      : <form className="card form section" onSubmit={submit}>
       <h2>{submission?"ส่งงาน/ส่งแก้ไข":"ส่งงาน"}</h2>
 
       <label className="field">
         <span>ไฟล์งาน (เลือกได้หลายไฟล์)</span>
-        <input name="files" type="file" multiple disabled={busy}/>
+        <input name="files" type="file" multiple accept={FILE_ACCEPT} disabled={busy}/>
       </label>
+
+      <div className="hint">ส่งได้สูงสุด 10 ไฟล์ • ไม่เกิน 20 MB ต่อไฟล์</div>
 
       <label className="field">
         <span>ลิงก์ผลงาน</span>
@@ -396,6 +407,6 @@ export default function StudentAssignmentDetail(){
       <button className="btn primary" disabled={busy}>
         {busy?"กำลังส่งงาน...":"ยืนยันส่งงาน"}
       </button>
-    </form>
+    </form>}
   </>;
 }

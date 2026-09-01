@@ -11,24 +11,12 @@ export default function TeacherDashboard() {
   useEffect(()=>{(async()=>{
     const {data,error}=await supabase.rpc("teacher_dashboard_stats");
     if(error){setError(errText(error));return;}
-
     const x=data?.[0];
-    if(x) setStats({
-      students:Number(x.students||0),
-      assignments:Number(x.assignments||0),
-      pending:Number(x.pending||0),
-      missing:Number(x.missing||0)
-    });
+    if(x)setStats({students:Number(x.students||0),assignments:Number(x.assignments||0),pending:Number(x.pending||0),missing:Number(x.missing||0)});
   })()},[]);
 
   return <>
-    <header className="page-header">
-      <div>
-        <h1>แดชบอร์ดครู</h1>
-        <p>ดูสถานะงานและติดตามนักเรียนจากจุดเดียว</p>
-      </div>
-    </header>
-
+    <header className="page-header"><div><h1>แดชบอร์ดครู</h1><p>ดูสถานะงานและติดตามนักเรียนจากจุดเดียว</p></div></header>
     {error&&<div className="error">{error}</div>}
 
     <section className="stats-grid">
@@ -38,15 +26,13 @@ export default function TeacherDashboard() {
       <StatCard label="งานเลยกำหนดที่ยังไม่ส่ง" value={stats.missing}/>
     </section>
 
-    <section className="card section">
-      <h2>ทางลัดการใช้งาน</h2>
-
-      <div className="quick-grid">
-        <Link to="/teacher/assignments/new">+ สร้างงานใหม่</Link>
-        <Link to="/teacher/assignments">จัดการงานตามรายวิชา</Link>
-        <Link to="/teacher/tracking">ดูว่าใครยังไม่ส่ง</Link>
-        <Link to="/teacher/grading">ตรวจงานและให้คะแนน</Link>
-      </div>
-    </section>
+    <section className="card section"><h2>ทางลัดการใช้งาน</h2><div className="quick-grid">
+      <Link to="/teacher/assignments/new">+ สร้างงานใหม่</Link>
+      <Link to="/teacher/assignments">จัดการงานตามรายวิชา</Link>
+      <Link to="/teacher/import-students">นำเข้า Excel/CSV</Link>
+      <Link to="/teacher/storage">ดูพื้นที่ไฟล์</Link>
+      <Link to="/teacher/tracking">ดูว่าใครยังไม่ส่ง</Link>
+      <Link to="/teacher/grading">ตรวจงานและให้คะแนน</Link>
+    </div></section>
   </>;
 }
