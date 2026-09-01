@@ -8,6 +8,7 @@ import ClassroomsPage from "./pages/teacher/ClassroomsPage";
 import CoursesPage from "./pages/teacher/CoursesPage";
 import MaterialsPage from "./pages/teacher/MaterialsPage";
 import AssignmentsPage from "./pages/teacher/AssignmentsPage";
+import TeacherCourseAssignmentsPage from "./pages/teacher/TeacherCourseAssignmentsPage";
 import TrackingPage from "./pages/teacher/TrackingPage";
 import MatrixPage from "./pages/teacher/MatrixPage";
 import GradingPage from "./pages/teacher/GradingPage";
@@ -32,6 +33,7 @@ export default function App(){
         <Route path="/teacher/courses" element={<CoursesPage/>}/>
         <Route path="/teacher/materials" element={<MaterialsPage/>}/>
         <Route path="/teacher/assignments" element={<AssignmentsPage/>}/>
+        <Route path="/teacher/assignments/course/:courseId" element={<TeacherCourseAssignmentsPage/>}/>
         <Route path="/teacher/tracking" element={<TrackingPage/>}/>
         <Route path="/teacher/matrix" element={<MatrixPage/>}/>
         <Route path="/teacher/grading" element={<GradingPage/>}/>

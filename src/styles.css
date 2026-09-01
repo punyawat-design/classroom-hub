@@ -126,3 +126,15 @@ html[data-theme="dark"] .enrollment-pane{border-color:#334155}
 html[data-theme="dark"] .student-manage-row{border-color:#263244}
 html[data-theme="dark"] .student-manage-row.history{background:#172033;border-color:#334155}
 @media(max-width:800px){.course-enrollment-grid{grid-template-columns:1fr}.enroll-by-code{flex-direction:column}}
+
+
+/* Assignment course-first UI */
+.teacher-course-card{cursor:pointer}
+.teacher-course-card h3{margin-bottom:4px}
+.matrix-status-cell{text-align:center;vertical-align:middle}
+.matrix-status-cell .badge{min-width:84px;justify-content:center;border:1px solid currentColor}
+.status-legend{align-items:center}
+.status-legend .badge{border:1px solid currentColor}
+@media(max-width:760px){
+  .matrix-status-cell .badge{min-width:74px;font-size:11px;padding:4px 7px}
+}
