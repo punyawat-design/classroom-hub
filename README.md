@@ -1,40 +1,25 @@
-# Classroom Hub — Vercel + Supabase
+# Classroom Hub v7 — Vercel + Supabase
 
-เวอร์ชันนี้เปลี่ยน Hosting จาก Cloudflare Pages มาเป็น **Vercel**
+เพิ่มจาก v6:
+- ครูแก้ไข Assignment ได้
+- ครูลบ Assignment ได้ พร้อมลบไฟล์ Submission ใน Storage
+- Assignment เลือกได้ว่าจะให้ทุกคนในรายวิชา หรือเฉพาะห้อง
+- นักเรียนลบงานที่ส่งแล้วเพื่อส่งใหม่ได้ ก่อนครูตรวจเสร็จ และเมื่อครูเปิด Allow Resubmission
+- เพิ่ม `course_students` สำหรับลงทะเบียนนักเรียนเป็นรายบุคคลในแต่ละรายวิชา
+- นักเรียนคนเดียวอยู่ได้หลายรายวิชา
+- ครูดึงนักเรียนเข้าวิชาด้วยรหัส หรือเลือกจากรายชื่อ
+- ถอนนักเรียนออกจากรายวิชาได้
+- ปุ่ม “จบรายวิชา / ถอนทั้งหมด”
+- การถอนเก็บประวัติ enrollment และงานเดิมไว้ ไม่ลบข้อมูลย้อนหลัง
 
-## โครงสร้าง
+## อัปเกรดจาก v6 ที่ใช้อยู่
 
-- Vercel → React + Vite Frontend
-- Supabase Auth → Login
-- Supabase PostgreSQL → Database
-- Supabase Storage → Files
-- Supabase RLS → Permissions
+1. Supabase → SQL Editor
+2. เปิด `supabase/migration_v7.sql`
+3. Copy ทั้งหมด → Run **ครั้งเดียว**
+4. อัปโหลดโค้ด v7 ไปแทน GitHub เดิม
+5. Commit/Push
+6. Vercel Deploy อัตโนมัติ
+7. เปิดเว็บแล้วกด `Ctrl + F5`
 
-## สิ่งที่แก้จาก Cloudflare
-
-- ลบ Wrangler
-- ลบ Cloudflare deployment config
-- เพิ่ม Vercel CLI
-- เพิ่ม `vercel.json` สำหรับ React Router SPA
-- เพิ่ม `VERCEL_DEPLOY_GUIDE_TH.md`
-
-## ทดลองบนเครื่อง
-
-```bash
-npm install
-npm run dev
-```
-
-## Deploy
-
-วิธีแนะนำ:
-GitHub → Import Project ใน Vercel → เพิ่ม Environment Variables → Deploy
-
-หรือใช้ CLI:
-
-```bash
-npx vercel login
-npm run deploy
-```
-
-อ่านขั้นตอนเต็มใน `VERCEL_DEPLOY_GUIDE_TH.md`
+> อย่ารัน `schema.sql` ซ้ำบนฐานข้อมูลเดิม ใช้ `migration_v7.sql` เท่านั้น

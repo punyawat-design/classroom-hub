@@ -1,8 +1,10 @@
 import { useEffect,useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { errText, thaiDate } from "../../lib/utils";
+import { useToast } from "../../context/ToastContext";
 
 export default function AnnouncementsPage(){
+  const {toast}=useToast();
   const [courses,setCourses]=useState<any[]>([]);
   const [rooms,setRooms]=useState<any[]>([]);
   const [items,setItems]=useState<any[]>([]);
@@ -31,7 +33,7 @@ export default function AnnouncementsPage(){
       title:String(fd.get("title")),
       body:String(fd.get("body"))
     });
-    if(error)setMessage(errText(error)); else {setMessage("โพสต์ประกาศแล้ว");e.currentTarget.reset();load();}
+    if(error)setMessage(errText(error)); else {setMessage("โพสต์ประกาศแล้ว");toast("โพสต์ประกาศแล้ว","","success");e.currentTarget.reset();load();}
   }
 
   return <>

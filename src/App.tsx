@@ -11,11 +11,13 @@ import AssignmentsPage from "./pages/teacher/AssignmentsPage";
 import TrackingPage from "./pages/teacher/TrackingPage";
 import MatrixPage from "./pages/teacher/MatrixPage";
 import GradingPage from "./pages/teacher/GradingPage";
+import TeacherCourseGradingPage from "./pages/teacher/TeacherCourseGradingPage";
 import AnnouncementsPage from "./pages/teacher/AnnouncementsPage";
 
 import StudentDashboard from "./pages/student/StudentDashboard";
 import StudentCoursesPage from "./pages/student/StudentCoursesPage";
 import StudentAssignmentsPage from "./pages/student/StudentAssignmentsPage";
+import StudentCourseAssignmentsPage from "./pages/student/StudentCourseAssignmentsPage";
 import StudentAssignmentDetail from "./pages/student/StudentAssignmentDetail";
 import StudentGradesPage from "./pages/student/StudentGradesPage";
 
@@ -33,6 +35,7 @@ export default function App(){
         <Route path="/teacher/tracking" element={<TrackingPage/>}/>
         <Route path="/teacher/matrix" element={<MatrixPage/>}/>
         <Route path="/teacher/grading" element={<GradingPage/>}/>
+        <Route path="/teacher/grading/course/:courseId" element={<TeacherCourseGradingPage/>}/>
         <Route path="/teacher/announcements" element={<AnnouncementsPage/>}/>
       </Route>
     </Route>
@@ -42,6 +45,7 @@ export default function App(){
         <Route path="/student" element={<StudentDashboard/>}/>
         <Route path="/student/courses" element={<StudentCoursesPage/>}/>
         <Route path="/student/assignments" element={<StudentAssignmentsPage/>}/>
+        <Route path="/student/assignments/course/:courseId" element={<StudentCourseAssignmentsPage/>}/>
         <Route path="/student/assignments/:id" element={<StudentAssignmentDetail/>}/>
         <Route path="/student/grades" element={<StudentGradesPage/>}/>
       </Route>

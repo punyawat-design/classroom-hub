@@ -2,23 +2,39 @@ import { useEffect,useMemo,useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
-import StatusBadge from "../../components/StatusBadge";
-import { Status } from "../../lib/status";
-import { thaiDate } from "../../lib/utils";
+import { Status, statusLabel } from "../../lib/status";
 
 export default function StudentAssignmentsPage(){
   const {user}=useAuth();
   const [items,setItems]=useState<any[]>([]);
-  const [filter,setFilter]=useState("ALL");
+
   useEffect(()=>{if(user) supabase.rpc("student_assignment_overview",{p_student_id:user.id}).then(({data})=>setItems(data||[]))},[user]);
-  const shown=useMemo(()=>filter==="ALL"?items:items.filter(x=>x.computed_status===filter),[items,filter]);
+
+  const groups=useMemo(()=>{
+    const map=new Map<string,{course_id:string;course_name:string;items:any[]}>();
+    items.forEach(x=>{
+      const key=x.course_id||x.course_name;
+      if(!map.has(key))map.set(key,{course_id:x.course_id,course_name:x.course_name,items:[]});
+      map.get(key)!.items.push(x);
+    });
+    return [...map.values()];
+  },[items]);
+
+  const activeStatuses:Status[]=["NOT_STARTED","IN_PROGRESS","REVISION_REQUIRED","OVERDUE"];
 
   return <>
-    <header className="page-header"><div><h1>งานของฉัน</h1><p>ดู กรอง และเปิดงานที่ได้รับมอบหมาย</p></div></header>
-    <div className="toolbar section"><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="ALL">ทุกสถานะ</option><option value="NOT_STARTED">ยังไม่เริ่ม</option><option value="IN_PROGRESS">กำลังทำ</option><option value="WAITING_REVIEW">รอตรวจ</option><option value="GRADED">ตรวจแล้ว</option><option value="REVISION_REQUIRED">ต้องแก้ไข</option><option value="LATE">ส่งล่าช้า</option><option value="OVERDUE">เลยกำหนด</option></select></div>
-    <div className="cards-list section">{shown.map(x=><article className="card assignment-card" key={x.assignment_id}>
-      <div><h3>{x.title}</h3><div className="muted">{x.course_name} • {x.classroom_name}</div><div className="small top-gap">กำหนดส่ง: {thaiDate(x.due_at)} • {x.max_score} คะแนน</div></div>
-      <div className="assignment-actions"><StatusBadge status={x.computed_status as Status}/><Link className="btn primary" to={`/student/assignments/${x.assignment_id}`}>เปิดงาน</Link></div>
-    </article>)}</div>
+    <header className="page-header"><div><h1>งานของฉัน</h1><p>เลือกวิชาก่อน แล้วค่อยดูงานของวิชานั้น</p></div></header>
+    <div className="course-grid section">
+      {groups.map(g=>{
+        const remaining=g.items.filter(x=>activeStatuses.includes(x.computed_status as Status)).length;
+        const overdue=g.items.filter(x=>x.computed_status==="OVERDUE").length;
+        return <Link className="card course-work-card" key={g.course_id||g.course_name} to={`/student/assignments/course/${g.course_id}`}>
+          <div className="course-icon">📘</div>
+          <div><h3>{g.course_name}</h3><div className="muted small">งานทั้งหมด {g.items.length} งาน</div></div>
+          <div className="course-count"><b>{remaining}</b><span>งานที่ต้องทำ</span>{overdue>0&&<em>{overdue} เลยกำหนด</em>}</div>
+        </Link>
+      })}
+      {groups.length===0&&<div className="empty card">ยังไม่มีงานที่ได้รับมอบหมาย</div>}
+    </div>
   </>;
 }

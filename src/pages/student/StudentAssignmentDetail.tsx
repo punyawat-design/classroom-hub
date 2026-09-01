@@ -4,6 +4,8 @@ import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../lib/supabase";
 import { errText, safeFileName, thaiDate } from "../../lib/utils";
 import StatusBadge from "../../components/StatusBadge";
+import { useToast } from "../../context/ToastContext";
+import { useConfirm } from "../../context/ConfirmContext";
 import { Status } from "../../lib/status";
 
 export default function StudentAssignmentDetail(){
@@ -14,6 +16,8 @@ export default function StudentAssignmentDetail(){
   const [files,setFiles]=useState<any[]>([]);
   const [computedStatus,setComputedStatus]=useState<Status>("NOT_STARTED");
   const [message,setMessage]=useState("");
+  const {toast}=useToast();
+  const {confirm}=useConfirm();
 
   async function load(){
     if(!user||!id)return;
@@ -44,6 +48,8 @@ export default function StudentAssignmentDetail(){
   async function submit(e:React.FormEvent<HTMLFormElement>){
     e.preventDefault();setMessage("");
     if(!user||!a)return;
+    const ok=await confirm({title:"ยืนยันส่งงาน?",message:"ตรวจสอบไฟล์ ลิงก์ และหมายเหตุให้เรียบร้อยก่อนส่ง",confirmText:"ส่งงาน"});
+    if(!ok)return;
     if(new Date()>new Date(a.due_at)&&!a.allow_late_submission){setMessage("งานนี้ไม่อนุญาตให้ส่งหลังหมดเวลา");return;}
     if(submission?.submitted_at&&!a.allow_resubmission&&submission.status!=="REVISION_REQUIRED"){setMessage("งานนี้ไม่อนุญาตให้ส่งใหม่");return;}
 
@@ -72,8 +78,43 @@ export default function StudentAssignmentDetail(){
       });
       if(fileError){setMessage(errText(fileError));return;}
     }
-    setMessage("ส่งงานเรียบร้อยแล้ว");
+    setMessage("");
+    toast("ส่งงานเรียบร้อยแล้ว",late?"ระบบบันทึกว่าเป็นงานส่งล่าช้า":"ครูจะเห็นงานในหน้ารอตรวจ","success");
     e.currentTarget.reset();
+    load();
+  }
+
+
+  async function deleteSubmission(){
+    if(!submission)return;
+    if(submission.status==="GRADED"){
+      toast("ลบไม่ได้","งานนี้ครูตรวจและให้คะแนนแล้ว กรุณาติดต่อครูหากต้องการส่งใหม่","error");
+      return;
+    }
+    if(!a.allow_resubmission){
+      toast("ลบไม่ได้","ครูไม่ได้เปิดให้ส่งงานใหม่สำหรับงานนี้","error");
+      return;
+    }
+
+    const ok=await confirm({
+      title:"ลบงานที่ส่งแล้ว?",
+      message:"ไฟล์ ลิงก์ และสถานะการส่งครั้งนี้จะถูกลบ แล้วคุณสามารถส่งใหม่ได้",
+      confirmText:"ลบเพื่อส่งใหม่",
+      danger:true
+    });
+    if(!ok)return;
+
+    const paths=files.map((f:any)=>f.storage_path).filter(Boolean);
+    if(paths.length){
+      const {error:storageError}=await supabase.storage.from("submissions").remove(paths);
+      if(storageError){toast("ลบไฟล์ไม่สำเร็จ",errText(storageError),"error");return;}
+    }
+
+    const {error}=await supabase.from("submissions").delete().eq("id",submission.id);
+    if(error){toast("ลบงานไม่สำเร็จ",errText(error),"error");return;}
+
+    toast("ลบงานที่ส่งแล้ว","ตอนนี้สามารถเลือกไฟล์และส่งใหม่ได้","success");
+    setSubmission(null);setFiles([]);setComputedStatus("NOT_STARTED");
     load();
   }
 
@@ -95,7 +136,9 @@ export default function StudentAssignmentDetail(){
     </section>
     {!submission&&<button className="btn primary section" onClick={start}>เริ่มทำงาน</button>}
     {submission&&<section className="card section">
-      <h2>การส่งล่าสุด</h2>
+      <div className="submission-head"><h2>การส่งล่าสุด</h2>
+        {submission.status!=="GRADED"&&a.allow_resubmission&&<button className="btn danger" onClick={deleteSubmission}>ลบงานนี้เพื่อส่งใหม่</button>}
+      </div>
       <p>วันที่ส่ง: {thaiDate(submission.submitted_at)}</p>
       {submission.submission_link&&<p><a className="text-link" href={submission.submission_link} target="_blank" rel="noreferrer">เปิดลิงก์ที่ส่ง</a></p>}
       <div className="file-list">{files.map(f=><button key={f.id} className="btn ghost" onClick={()=>openFile(f.storage_path)}>📎 {f.file_name}</button>)}</div>

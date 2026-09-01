@@ -1,8 +1,10 @@
 import { useEffect,useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { errText } from "../../lib/utils";
+import { useToast } from "../../context/ToastContext";
 
 export default function ClassroomsPage(){
+  const {toast}=useToast();
   const [rooms,setRooms]=useState<any[]>([]);
   const [selected,setSelected]=useState("");
   const [students,setStudents]=useState<any[]>([]);
@@ -27,7 +29,7 @@ export default function ClassroomsPage(){
     const {data:{user}}=await supabase.auth.getUser();
     if(!user)return;
     const {error}=await supabase.from("classrooms").insert({name,teacher_id:user.id});
-    if(error)setMessage(errText(error)); else {setName("");setMessage("สร้างห้องเรียนแล้ว");await loadRooms();}
+    if(error)setMessage(errText(error)); else {setName("");setMessage("สร้างห้องเรียนแล้ว");toast("สร้างห้องเรียนแล้ว","","success");await loadRooms();}
   }
   async function enroll(e:React.FormEvent){
     e.preventDefault(); if(!selected)return;
