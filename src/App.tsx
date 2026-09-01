@@ -7,6 +7,7 @@ import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import ClassroomsPage from "./pages/teacher/ClassroomsPage";
 import CoursesPage from "./pages/teacher/CoursesPage";
 import MaterialsPage from "./pages/teacher/MaterialsPage";
+import TeacherCourseMaterialsPage from "./pages/teacher/TeacherCourseMaterialsPage";
 import AssignmentsPage from "./pages/teacher/AssignmentsPage";
 import TrackingPage from "./pages/teacher/TrackingPage";
 import MatrixPage from "./pages/teacher/MatrixPage";
@@ -32,6 +33,7 @@ export default function App(){
         <Route path="/teacher/classrooms" element={<ClassroomsPage/>}/>
         <Route path="/teacher/courses" element={<CoursesPage/>}/>
         <Route path="/teacher/materials" element={<MaterialsPage/>}/>
+        <Route path="/teacher/materials/course/:courseId" element={<TeacherCourseMaterialsPage/>}/>
         <Route path="/teacher/assignments" element={<AssignmentsPage/>}/>
         <Route path="/teacher/tracking" element={<TrackingPage/>}/>
         <Route path="/teacher/matrix" element={<MatrixPage/>}/>

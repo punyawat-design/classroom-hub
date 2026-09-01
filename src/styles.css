@@ -138,3 +138,14 @@ html[data-theme="dark"] .student-manage-row.history{background:#172033;border-co
 @media(max-width:760px){
   .matrix-status-cell .badge{min-width:74px;font-size:11px;padding:4px 7px}
 }
+
+
+/* Materials manager + inline previews */
+.material-manage-card{display:flex;justify-content:space-between;gap:18px;align-items:center}
+.image-preview-wrap{display:flex;justify-content:center;align-items:center;background:#f8fafc;border:1px solid #dbe0e8;border-radius:12px;padding:12px;min-height:260px}
+.material-image-preview{display:block;max-width:100%;max-height:68vh;object-fit:contain;border-radius:8px}
+.material-file-error{min-height:250px;display:grid;place-items:center;align-content:center;gap:8px;text-align:center;background:#fff7f7;border:1px solid #fecaca;border-radius:12px;color:#991b1b;padding:20px}
+.material-file-error span{color:#7f1d1d}.material-file-error small{color:#9f1239;overflow-wrap:anywhere}
+html[data-theme="dark"] .image-preview-wrap{background:#0f172a;border-color:#334155}
+html[data-theme="dark"] .material-file-error{background:#2a1217;border-color:#7f1d1d;color:#fecaca}
+@media(max-width:700px){.material-manage-card{align-items:flex-start;flex-direction:column}}
