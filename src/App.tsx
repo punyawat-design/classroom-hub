@@ -4,6 +4,7 @@ import AppLayout from "./components/AppLayout";
 import LoginPage from "./pages/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import AdventureLeaderboardPage from "./pages/AdventureLeaderboardPage";
 
 import TeacherDashboard from "./pages/teacher/TeacherDashboard";
 import ClassroomsPage from "./pages/teacher/ClassroomsPage";
@@ -53,6 +54,7 @@ export default function App(){
         <Route path="/teacher/grading/course/:courseId" element={<TeacherCourseGradingPage/>}/>
         <Route path="/teacher/announcements" element={<AnnouncementsPage/>}/>
         <Route path="/teacher/storage" element={<StorageUsagePage/>}/>
+        <Route path="/teacher/adventure" element={<AdventureLeaderboardPage/>}/>
       </Route>
     </Route>
 
@@ -66,6 +68,7 @@ export default function App(){
         <Route path="/student/assignments/course/:courseId" element={<StudentCourseAssignmentsPage/>}/>
         <Route path="/student/assignments/:id" element={<StudentAssignmentDetail/>}/>
         <Route path="/student/grades" element={<StudentGradesPage/>}/>
+        <Route path="/student/adventure" element={<AdventureLeaderboardPage/>}/>
       </Route>
     </Route>
 

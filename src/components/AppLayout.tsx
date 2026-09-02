@@ -6,7 +6,7 @@ import { useTheme } from "../context/ThemeContext";
 import {
   LayoutDashboard, BookOpen, Users, ClipboardList, Grid3X3,
   GraduationCap, Megaphone, Files, LogOut, CheckSquare, Palette,
-  FileSpreadsheet, KeyRound, HardDrive
+  FileSpreadsheet, KeyRound, HardDrive, Mountain
 } from "lucide-react";
 
 const teacherNav = [
@@ -21,6 +21,7 @@ const teacherNav = [
   ["/teacher/grading", "ตรวจงาน", GraduationCap],
   ["/teacher/announcements", "ประกาศ", Megaphone],
   ["/teacher/storage", "พื้นที่ไฟล์", HardDrive],
+  ["/teacher/adventure", "ศึกพิชิตยอดเขา", Mountain],
 ] as const;
 
 const studentNav = [
@@ -29,6 +30,7 @@ const studentNav = [
   ["/student/courses", "รายวิชาและสื่อ", BookOpen],
   ["/student/assignments", "งานของฉัน", ClipboardList],
   ["/student/grades", "คะแนน", GraduationCap],
+  ["/student/adventure", "ศึกพิชิตยอดเขา", Mountain],
 ] as const;
 
 export default function AppLayout() {
