@@ -30,6 +30,7 @@ import StudentAssignmentsPage from "./pages/student/StudentAssignmentsPage";
 import StudentCourseAssignmentsPage from "./pages/student/StudentCourseAssignmentsPage";
 import StudentAssignmentDetail from "./pages/student/StudentAssignmentDetail";
 import StudentGradesPage from "./pages/student/StudentGradesPage";
+import StudentCourseGradesPage from "./pages/student/StudentCourseGradesPage";
 
 export default function App(){
   return <Routes>
@@ -68,6 +69,7 @@ export default function App(){
         <Route path="/student/assignments/course/:courseId" element={<StudentCourseAssignmentsPage/>}/>
         <Route path="/student/assignments/:id" element={<StudentAssignmentDetail/>}/>
         <Route path="/student/grades" element={<StudentGradesPage/>}/>
+        <Route path="/student/grades/course/:courseRef" element={<StudentCourseGradesPage/>}/>
         <Route path="/student/adventure" element={<AdventureLeaderboardPage/>}/>
       </Route>
     </Route>
