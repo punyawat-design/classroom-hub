@@ -1,10 +1,11 @@
 import { useEffect,useMemo,useState } from "react";
 import { Link } from "react-router-dom";
-import { Archive, ArchiveRestore, Copy, RefreshCw } from "lucide-react";
+import { Archive, ArchiveRestore, Copy, RefreshCw, Trash2 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { errText, thaiDate } from "../../lib/utils";
 import { useToast } from "../../context/ToastContext";
 import { useConfirm } from "../../context/ConfirmContext";
+import { deleteCourseDeep } from "../../lib/deleteContent";
 
 export default function CoursesPage(){
   const {toast}=useToast();
@@ -19,6 +20,7 @@ export default function CoursesPage(){
   const [studentCode,setStudentCode]=useState("");
   const [search,setSearch]=useState("");
   const [message,setMessage]=useState("");
+  const [deletingCourse,setDeletingCourse]=useState(false);
 
   async function load(){
     const [{data:c,error:ce},{data:r,error:re}]=await Promise.all([
@@ -105,6 +107,33 @@ export default function CoursesPage(){
     else{toast(archive?"เก็บรายวิชาเข้าคลังแล้ว":"นำรายวิชากลับมาแล้ว","","success");await load();}
   }
 
+  async function deleteCourse(){
+    const course=courses.find(c=>c.id===selectedCourse);
+    if(!course||deletingCourse)return;
+
+    const ok=await confirm({
+      title:"ลบรายวิชาถาวร?",
+      message:`วิชา “${course.name}” จะถูกลบพร้อมสื่อ งาน ไฟล์ประกอบ งานที่นักเรียนส่ง คะแนน ประกาศ และรายชื่อนักเรียนในวิชานี้ การลบนี้ย้อนกลับไม่ได้`,
+      confirmText:"ลบรายวิชา",
+      danger:true
+    });
+    if(!ok)return;
+
+    setDeletingCourse(true);
+    try{
+      await deleteCourseDeep(course.id);
+      toast("ลบรายวิชาแล้ว",course.name,"success");
+      setSelectedCourse("");
+      setRoster([]);
+      setAvailable([]);
+      await load();
+    }catch(error){
+      toast("ลบรายวิชาไม่สำเร็จ",errText(error),"error");
+    }finally{
+      setDeletingCourse(false);
+    }
+  }
+
   async function regenerateCode(){
     const ok=await confirm({title:"สร้างรหัสเข้าร่วมใหม่?",message:"รหัสเดิมจะใช้เข้าร่วมรายวิชาไม่ได้อีก",confirmText:"สร้างรหัสใหม่"});
     if(!ok)return;
@@ -149,7 +178,7 @@ export default function CoursesPage(){
     {selected&&<section className="card section">
       <div className="course-roster-head">
         <div><h2>{selected.name}</h2><p className="muted">นักเรียน 1 คนสามารถอยู่หลายรายวิชาได้</p></div>
-        <div className="actions"><Link className="btn ghost" to={`/teacher/assignments/course/${selected.id}`}>ดูงาน</Link><Link className="btn ghost" to={`/teacher/materials/course/${selected.id}`}>ดูสื่อ</Link>{selected.archived_at?<button className="btn primary" onClick={()=>toggleArchive(false)}><ArchiveRestore size={17}/> นำกลับมาใช้งาน</button>:<button className="btn warning" onClick={()=>toggleArchive(true)}><Archive size={17}/> เก็บเข้าคลัง</button>}<button className="btn danger" onClick={completeCourse}>ถอนนักเรียนทั้งหมด</button></div>
+        <div className="actions"><Link className="btn ghost" to={`/teacher/assignments/course/${selected.id}`}>ดูงาน</Link><Link className="btn ghost" to={`/teacher/materials/course/${selected.id}`}>ดูสื่อ</Link>{selected.archived_at?<button className="btn primary" onClick={()=>toggleArchive(false)}><ArchiveRestore size={17}/> นำกลับมาใช้งาน</button>:<button className="btn warning" onClick={()=>toggleArchive(true)}><Archive size={17}/> เก็บเข้าคลัง</button>}<button className="btn danger" onClick={completeCourse}>ถอนนักเรียนทั้งหมด</button><button className="btn danger" onClick={deleteCourse} disabled={deletingCourse}><Trash2 size={17}/> {deletingCourse?"กำลังลบ...":"ลบรายวิชา"}</button></div>
       </div>
 
       <div className="join-code-box"><div><span>รหัสให้นักเรียนเข้าร่วมวิชา</span><b>{selected.join_code}</b></div><div className="actions"><button className="btn ghost" onClick={()=>copyCode(selected.join_code)}><Copy size={16}/> คัดลอก</button><button className="btn ghost" onClick={regenerateCode}><RefreshCw size={16}/> เปลี่ยนรหัส</button></div></div>

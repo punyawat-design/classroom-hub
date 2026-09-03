@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowRightLeft,Check,FileSpreadsheet,Search,Trash2,UserPlus } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { errText } from "../../lib/utils";
+import { deleteClassroomDeep } from "../../lib/deleteContent";
 import { useToast } from "../../context/ToastContext";
 import { useConfirm } from "../../context/ConfirmContext";
 
@@ -33,6 +34,7 @@ export default function ClassroomsPage(){
   const [movingStudent,setMovingStudent]=useState<any|null>(null);
   const [moveTarget,setMoveTarget]=useState("");
   const [moving,setMoving]=useState(false);
+  const [deletingRoom,setDeletingRoom]=useState(false);
 
   async function loadRooms(){
     const {data,error}=await supabase.from("classrooms").select("id,name,created_at").order("name");
@@ -115,6 +117,35 @@ export default function ClassroomsPage(){
     }
   }
 
+  async function deleteRoom(){
+    if(!selected||deletingRoom)return;
+    const room=rooms.find(r=>r.id===selected);
+    if(!room)return;
+
+    const ok=await confirm({
+      title:"ลบห้องเรียนถาวร?",
+      message:`ห้อง “${room.name}” จะถูกลบ รวมถึงงาน/การส่งงาน/คะแนนที่สั่งเฉพาะห้องนี้ และประกาศที่ผูกกับห้องนี้ บัญชีนักเรียนและรายวิชาจะไม่ถูกลบ`,
+      confirmText:"ลบห้องเรียน",
+      danger:true
+    });
+    if(!ok)return;
+
+    setDeletingRoom(true);
+    try{
+      await deleteClassroomDeep(selected);
+      toast("ลบห้องเรียนแล้ว",room.name,"success");
+      setSelected("");
+      setStudents([]);
+      setCode("");
+      setChosenStudent(null);
+      await loadRooms();
+    }catch(error){
+      toast("ลบห้องเรียนไม่สำเร็จ",errText(error),"error");
+    }finally{
+      setDeletingRoom(false);
+    }
+  }
+
   async function removeStudent(student:any){
     const room=rooms.find(r=>r.id===selected);
     const ok=await confirm({
@@ -167,6 +198,9 @@ export default function ClassroomsPage(){
       <div className="card">
         <h2>เลือกห้อง</h2>
         <label className="field"><span>ห้องเรียน</span><select value={selected} onChange={e=>loadStudents(e.target.value)}><option value="">เลือกห้อง</option>{rooms.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
+        {selected&&<div className="actions" style={{justifyContent:"flex-end",marginBottom:12}}>
+          <button className="btn danger" type="button" onClick={deleteRoom} disabled={deletingRoom}><Trash2 size={16}/> {deletingRoom?"กำลังลบ...":"ลบห้องเรียน"}</button>
+        </div>}
 
         {selected&&<form className="inline-form" onSubmit={enroll} style={{alignItems:"flex-start"}}>
           <div style={{position:"relative",flex:"1 1 360px",minWidth:0}}>
