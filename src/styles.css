@@ -253,3 +253,74 @@ html[data-theme="dark"] .podium-1{background:linear-gradient(135deg,#30270c,#111
 @media(max-width:650px){.work-summary-main{grid-template-columns:auto 1fr}.work-summary-percent{grid-column:2}.course-work-progress-main{align-items:flex-start}.adventure-page-head h1{font-size:28px}.adventure-stage{height:570px;min-width:720px}.player-avatar{width:48px;height:48px}.player-tag{max-width:125px}.classroom-roster-card table{min-width:760px}}
 
 .adventure-sun,.cloud,.mountain-back,.mountain-main,.mountain-snow{display:none!important}
+
+
+/* =========================================================
+   Dark theme contrast fixes
+   Keep text readable when an element intentionally stays light
+   ========================================================= */
+html[data-theme="dark"] .quick-grid a{
+  background:#f8fafc;
+  border-color:#dbe3ee;
+  color:#111827;
+}
+html[data-theme="dark"] .quick-grid a:hover{
+  background:#ffffff;
+  border-color:var(--accent);
+  color:#111827;
+}
+
+html[data-theme="dark"] .theme-mode button{
+  background:#f8fafc;
+  border-color:#dbe0e8;
+  color:#111827;
+}
+html[data-theme="dark"] .theme-mode button.selected{
+  color:var(--accent);
+}
+
+html[data-theme="dark"] code{
+  background:#f1f5f9;
+  color:#111827;
+}
+
+html[data-theme="dark"] .feedback{
+  background:#fffbeb;
+  border-color:#fde68a;
+  color:#111827;
+}
+
+html[data-theme="dark"] .info-grid div{
+  background:#f8fafc;
+  color:#111827;
+}
+html[data-theme="dark"] .info-grid span{
+  color:#475569;
+}
+
+html[data-theme="dark"] .file-preview-placeholder{
+  background:#f8fafc;
+  border-color:#cbd5e1;
+  color:#111827;
+}
+html[data-theme="dark"] .file-preview-placeholder span{
+  color:#475569;
+}
+
+/* Light icon tiles used across course/dashboard cards */
+html[data-theme="dark"] .course-icon{
+  color:#111827;
+}
+
+/* Native browser placeholders should remain visible on dark inputs */
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder{
+  color:#94a3b8;
+  opacity:1;
+}
+
+/* Disabled buttons must still be readable */
+html[data-theme="dark"] .btn:disabled,
+html[data-theme="dark"] button:disabled{
+  opacity:.72;
+}
